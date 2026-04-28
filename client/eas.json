@@ -1,0 +1,27 @@
+{
+  "cli": {
+    "version": ">= 18.7.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "production": {
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "choithramani4@gmail.com",
+        "ascAppId": "6762481040",
+        "appleTeamId": "RP423FWHCR"
+      }
+    }
+  }
+}
