@@ -12,7 +12,11 @@ import BottomSheet, {
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import { TextWrapper } from "@/components/text-wrapper";
-import { fetchFinexerConnectLink, fetchStatus } from "@/lib/api";
+import {
+  fetchFinexerConnectLink,
+  fetchStatus,
+  getErrorMessage,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 export type ConnectBankSheetRef = {
@@ -57,11 +61,7 @@ export const ConnectBankSheet = forwardRef<ConnectBankSheetRef, Props>(
         setBrowserOpened(true);
       } catch (err) {
         console.error("Finexer connect error:", err);
-        setError(
-          err instanceof Error && err.message.includes("connect-link")
-            ? "Server couldn't create a consent link. Is FINEXER_API_KEY set?"
-            : "Could not open browser. Please try again.",
-        );
+        setError(getErrorMessage(err, "Could not open browser. Please try again."));
       } finally {
         setConnecting(false);
       }
@@ -84,8 +84,8 @@ export const ConnectBankSheet = forwardRef<ConnectBankSheetRef, Props>(
             "We couldn't detect a connected bank yet. Please complete the connection in your browser first.",
           );
         }
-      } catch {
-        setError("Could not verify connection. Please try again.");
+      } catch (err) {
+        setError(getErrorMessage(err, "Could not verify connection. Please try again."));
       } finally {
         setVerifying(false);
       }
@@ -200,7 +200,7 @@ export const ConnectBankSheet = forwardRef<ConnectBankSheetRef, Props>(
                       weight="medium"
                       style={{ fontSize: 16, color: "#FFFFFF" }}
                     >
-                      I've connected my bank
+                      I connected my bank
                     </TextWrapper>
                   )}
                 </Pressable>

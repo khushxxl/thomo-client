@@ -1,7 +1,7 @@
-import { View, Dimensions, FlatList, Pressable } from "react-native";
+import { View, Dimensions, FlatList, Pressable, Alert } from "react-native";
 import { router } from "expo-router";
 import { useRef, useState, useCallback } from "react";
-import { updateProfile } from "@/lib/api";
+import { getErrorMessage, updateProfile } from "@/lib/api";
 import { StatusBar } from "expo-status-bar";
 import Animated, {
   useSharedValue,
@@ -9,6 +9,7 @@ import Animated, {
   interpolate,
   interpolateColor,
   useAnimatedScrollHandler,
+  type SharedValue,
 } from "react-native-reanimated";
 import { TextWrapper } from "@/components/text-wrapper";
 import { Pressable3D } from "@/components/pressable-3d";
@@ -44,7 +45,7 @@ function Dot({
   scrollX,
 }: {
   index: number;
-  scrollX: Animated.SharedValue<number>;
+  scrollX: SharedValue<number>;
 }) {
   const style = useAnimatedStyle(() => {
     const width = interpolate(
@@ -79,7 +80,7 @@ function SlideItem({
 }: {
   item: BenefitSlide;
   index: number;
-  scrollX: Animated.SharedValue<number>;
+  scrollX: SharedValue<number>;
 }) {
   const animStyle = useAnimatedStyle(() => {
     const scale = interpolate(
@@ -157,10 +158,11 @@ export default function BenefitsScreen() {
   const finishOnboarding = async () => {
     try {
       await updateProfile({ onboarded: true });
+      router.replace("/(tabs)/dashboard" as never);
     } catch (err) {
       console.error("Failed to mark onboarded:", err);
+      Alert.alert("Couldn't continue", getErrorMessage(err));
     }
-    router.replace("/(tabs)/dashboard" as never);
   };
 
   const handleContinue = () => {

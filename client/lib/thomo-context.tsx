@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
+  getErrorMessage,
   disconnect as apiDisconnect,
   fetchBalance,
   fetchStatus,
@@ -55,6 +56,7 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       setBalance(bal);
     } catch (err) {
       console.error("Balance load failed:", err);
+      setError(getErrorMessage(err, "Could not load your balance."));
     } finally {
       setBalanceLoading(false);
     }
@@ -67,6 +69,7 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       setTransactions(txs);
     } catch (err) {
       console.error("Transactions load failed:", err);
+      setError(getErrorMessage(err, "Could not load transactions."));
     } finally {
       setTransactionsLoading(false);
     }
@@ -79,19 +82,17 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       setConnected(isConnected);
 
       if (isConnected) {
-        loadBalance();
-        loadTransactions();
+        await Promise.all([loadBalance(), loadTransactions()]);
       } else {
         setBalance(null);
         setTransactions([]);
       }
     } catch (err) {
-      // Server unreachable → treat as not connected so the UI prompts to connect
       console.error("ThomoContext load failed:", err);
       setConnected(false);
       setBalance(null);
       setTransactions([]);
-      setError("Could not reach server");
+      setError(getErrorMessage(err, "Could not load your bank data."));
     }
   }, [loadBalance, loadTransactions]);
 
@@ -127,6 +128,7 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       setConnected(false);
       setBalance(null);
       setTransactions([]);
+      setError(getErrorMessage(err, "Could not refresh your bank data."));
     } finally {
       setRefreshing(false);
     }
@@ -143,6 +145,7 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
     setConnected(false);
     setBalance(null);
     setTransactions([]);
+    setError(null);
   }, []);
 
   const vat = useMemo(

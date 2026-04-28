@@ -1,5 +1,4 @@
-import { SERVER_URL } from "@/lib/api";
-import { supabase } from "@/lib/supabase";
+import { apiJson } from "@/lib/api";
 
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "cancelled";
 
@@ -40,33 +39,6 @@ export type UpdateInvoiceInput = Partial<
     | "paid_at"
   >
 >;
-
-async function authHeaders(): Promise<HeadersInit> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-async function apiJson<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
-  const headers: Record<string, string> = {
-    ...(await authHeaders()),
-    ...(init.headers as Record<string, string> | undefined),
-  };
-  if (init.body && typeof init.body === "string") {
-    headers["Content-Type"] = "application/json";
-  }
-
-  const res = await fetch(`${SERVER_URL}${path}`, { ...init, headers });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Request failed: ${res.status}`);
-  }
-  if (res.status === 204) return undefined as T;
-  return res.json();
-}
 
 export async function listInvoices(
   statusFilter?: InvoiceStatus,

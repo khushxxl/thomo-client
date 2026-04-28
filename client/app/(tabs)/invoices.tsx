@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Image } from "expo-image";
 import { TextWrapper } from "@/components/text-wrapper";
 import { Pressable3D } from "@/components/pressable-3d";
 import * as Haptics from "expo-haptics";
@@ -21,6 +20,7 @@ import {
   type Invoice,
   type InvoiceStatus,
 } from "@/lib/invoices";
+import { getErrorMessage } from "@/lib/api";
 
 const TABS = ["All", "Paid", "Pending", "Overdue", "Draft"] as const;
 
@@ -278,7 +278,7 @@ export default function InvoicesScreen() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [createOption, setCreateOption] = useState<CreateOption>("thomo");
+  const [error, setError] = useState<string | null>(null);
 
   const sheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => ["38%"], []);
@@ -291,8 +291,11 @@ export default function InvoicesScreen() {
           : (activeTab.toLowerCase() as InvoiceStatus);
       const data = await listInvoices(filter);
       setInvoices(data);
+      setError(null);
     } catch (err) {
       console.error("Failed to load invoices:", err);
+      setInvoices([]);
+      setError(getErrorMessage(err, "Could not load invoices."));
     } finally {
       setLoading(false);
     }
@@ -412,6 +415,15 @@ export default function InvoicesScreen() {
         {loading ? (
           <View style={{ paddingTop: 60, alignItems: "center" }}>
             <ActivityIndicator color="#1A1A1A" />
+          </View>
+        ) : error ? (
+          <View style={{ paddingTop: 60, alignItems: "center", paddingHorizontal: 24 }}>
+            <TextWrapper
+              weight="regular"
+              style={{ fontSize: 15, color: "#888", textAlign: "center" }}
+            >
+              {error}
+            </TextWrapper>
           </View>
         ) : invoices.length === 0 ? (
           <View style={{ paddingTop: 60, alignItems: "center" }}>

@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { TextWrapper } from "@/components/text-wrapper";
 import { useThomo } from "@/lib/thomo-context";
 import { useAuth } from "@/lib/auth-context";
+import { getErrorMessage } from "@/lib/api";
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
@@ -25,7 +26,7 @@ export default function ProfileScreen() {
               await disconnect();
             } catch (err) {
               console.error("Disconnect failed:", err);
-              Alert.alert("Error", "Could not disconnect. Is the server running?");
+              Alert.alert("Error", getErrorMessage(err));
             } finally {
               setDisconnecting(false);
             }

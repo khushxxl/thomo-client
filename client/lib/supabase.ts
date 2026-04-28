@@ -12,6 +12,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+const supabaseProjectRef = new URL(supabaseUrl).hostname.split(".")[0];
+export const SUPABASE_STORAGE_KEY = `sb-${supabaseProjectRef}-auth-token`;
+
 /**
  * Client-side Supabase instance.
  *
@@ -25,6 +28,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
+    storageKey: SUPABASE_STORAGE_KEY,
     persistSession: true,
     autoRefreshToken: true,
     // React Native doesn't expose URL-based session detection

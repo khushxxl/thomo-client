@@ -9,8 +9,9 @@ import {
 } from "react";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import { supabase } from "@/lib/supabase";
+import { supabase, SUPABASE_STORAGE_KEY } from "@/lib/supabase";
 import type { Session, User } from "@supabase/supabase-js";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -26,6 +27,14 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null);
 
 const REDIRECT_URI = Linking.createURL("auth/callback");
+
+async function clearPersistedAuth(): Promise<void> {
+  const keys = await AsyncStorage.getAllKeys();
+  const authKeys = keys.filter((key) => key.startsWith(SUPABASE_STORAGE_KEY));
+  if (authKeys.length > 0) {
+    await AsyncStorage.multiRemove(authKeys);
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -150,13 +159,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    setLoading(true);
     try {
-      await supabase.auth.signOut({ scope: "local" });
+      await supabase.auth.signOut();
     } catch (err) {
-      console.warn("signOut error (continuing):", err);
+      console.warn("Global signOut failed, clearing local auth state:", err);
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } catch (localErr) {
+        console.warn("Local signOut failed, removing persisted auth:", localErr);
+      }
+    } finally {
+      await clearPersistedAuth();
     }
     setSession(null);
     setUser(null);
+    setLoading(false);
     router.replace("/welcome");
   }, []);
 

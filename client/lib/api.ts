@@ -1,6 +1,77 @@
+import Constants from "expo-constants";
 import { supabase } from "@/lib/supabase";
 
-export const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL;
+function resolveServerUrl(): string {
+  const configured = process.env.EXPO_PUBLIC_SERVER_URL?.trim();
+  if (!configured) {
+    throw new Error(
+      "Missing EXPO_PUBLIC_SERVER_URL. Set it in client/.env and restart Expo.",
+    );
+  }
+
+  const url = new URL(configured);
+  const isLocalHost =
+    url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (!isLocalHost) {
+    return url.toString().replace(/\/$/, "");
+  }
+
+  const expoHost =
+    Constants.expoConfig?.hostUri?.split(":")[0] ??
+    Constants.expoGoConfig?.debuggerHost?.split(":")[0] ??
+    null;
+
+  if (expoHost) {
+    url.hostname = expoHost;
+  }
+
+  return url.toString().replace(/\/$/, "");
+}
+
+export const SERVER_URL = resolveServerUrl();
+
+export class ApiError extends Error {
+  status: number | null;
+
+  constructor(message: string, status: number | null = null) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+export class UnauthorizedError extends ApiError {
+  constructor(message: string = "Your session has expired. Please sign in again.") {
+    super(message, 401);
+    this.name = "UnauthorizedError";
+  }
+}
+
+export class NetworkError extends ApiError {
+  constructor(message: string) {
+    super(message, null);
+    this.name = "NetworkError";
+  }
+}
+
+async function getAccessToken(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) {
+    throw new UnauthorizedError();
+  }
+  return token;
+}
+
+async function readErrorMessage(res: Response): Promise<string> {
+  try {
+    const data = (await res.json()) as { error?: string; message?: string };
+    return data.error || data.message || `Request failed with ${res.status}`;
+  } catch {
+    const text = await res.text();
+    return text || `Request failed with ${res.status}`;
+  }
+}
 
 export type ApiTransaction = {
   transaction_id: string;
@@ -28,42 +99,69 @@ export type ApiBalance = {
   }>;
 };
 
-/**
- * Tiny fetch wrapper that attaches the current Supabase session token as a
- * Bearer header so the server can identify the user. Falls through silently
- * when there's no session — the server's DEV_USER_ID fallback picks up dev.
- */
 async function api(path: string, init: RequestInit = {}): Promise<Response> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  const token = await getAccessToken();
 
   const headers = new Headers(init.headers);
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  headers.set("Authorization", `Bearer ${token}`);
 
-  return fetch(`${SERVER_URL}${path}`, { ...init, headers });
+  try {
+    return await fetch(`${SERVER_URL}${path}`, { ...init, headers });
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new NetworkError(
+        SERVER_URL.includes("localhost") || SERVER_URL.includes("127.0.0.1")
+          ? "Could not reach the API server. If you're testing on a phone, use your Mac's LAN IP instead of localhost."
+          : "Could not reach the API server. Check that the backend is running and reachable from the app.",
+      );
+    }
+    throw err;
+  }
+}
+
+export async function apiJson<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const res = await api(path, init);
+  if (!res.ok) {
+    const message = await readErrorMessage(res);
+    if (res.status === 401) {
+      throw new UnauthorizedError(message);
+    }
+    throw new ApiError(message, res.status);
+  }
+  if (res.status === 204) {
+    return undefined as T;
+  }
+  return res.json() as Promise<T>;
+}
+
+export function getErrorMessage(
+  err: unknown,
+  fallback: string = "Something went wrong. Please try again.",
+): string {
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  return fallback;
 }
 
 export async function fetchStatus(): Promise<{ connected: boolean }> {
-  const res = await api("/status");
-  if (!res.ok) throw new Error("Failed to fetch status");
-  return res.json();
+  return apiJson<{ connected: boolean }>("/status");
 }
 
 export async function fetchBalance(): Promise<ApiBalance> {
-  const res = await api("/balance");
-  if (!res.ok) throw new Error("Failed to fetch balance");
-  return res.json();
+  return apiJson<ApiBalance>("/balance");
 }
 
 export async function fetchTransactions(): Promise<ApiTransaction[]> {
-  const res = await api("/transactions");
-  if (!res.ok) throw new Error("Failed to fetch transactions");
-  const data = (await res.json()) as { transactions: ApiTransaction[] };
+  const data = await apiJson<{ transactions: ApiTransaction[] }>("/transactions");
   return data.transactions;
 }
 
 export async function disconnect(): Promise<void> {
-  await api("/disconnect", { method: "POST" });
+  await apiJson<void>("/disconnect", { method: "POST" });
 }
 
 /* -------------------------------- Profile -------------------------------- */
@@ -83,9 +181,7 @@ export type Profile = {
 };
 
 export async function fetchProfile(): Promise<Profile> {
-  const res = await api("/profile");
-  if (!res.ok) throw new Error("Failed to fetch profile");
-  return res.json();
+  return apiJson<Profile>("/profile");
 }
 
 export async function updateProfile(
@@ -102,13 +198,11 @@ export async function updateProfile(
     >
   >,
 ): Promise<Profile> {
-  const res = await api("/profile", {
+  return apiJson<Profile>("/profile", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates),
   });
-  if (!res.ok) throw new Error("Failed to update profile");
-  return res.json();
 }
 
 /* --------------------------------- Chat --------------------------------- */
@@ -127,30 +221,28 @@ export type ChatMessage = {
 };
 
 export async function fetchConversations(): Promise<Conversation[]> {
-  const res = await api("/chat/conversations");
-  if (!res.ok) throw new Error("Failed to fetch conversations");
-  const data = (await res.json()) as { conversations: Conversation[] };
+  const data = await apiJson<{ conversations: Conversation[] }>(
+    "/chat/conversations",
+  );
   return data.conversations;
 }
 
 export async function createConversation(
   title?: string,
 ): Promise<Conversation> {
-  const res = await api("/chat/conversations", {
+  return apiJson<Conversation>("/chat/conversations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
   });
-  if (!res.ok) throw new Error("Failed to create conversation");
-  return res.json();
 }
 
 export async function fetchMessages(
   conversationId: string,
 ): Promise<ChatMessage[]> {
-  const res = await api(`/chat/conversations/${conversationId}/messages`);
-  if (!res.ok) throw new Error("Failed to fetch messages");
-  const data = (await res.json()) as { messages: ChatMessage[] };
+  const data = await apiJson<{ messages: ChatMessage[] }>(
+    `/chat/conversations/${conversationId}/messages`,
+  );
   return data.messages;
 }
 
@@ -158,19 +250,19 @@ export async function sendMessage(
   conversationId: string,
   content: string,
 ): Promise<ChatMessage> {
-  const res = await api(`/chat/conversations/${conversationId}/messages`, {
+  return apiJson<ChatMessage>(`/chat/conversations/${conversationId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content }),
   });
-  if (!res.ok) throw new Error("Failed to send message");
-  return res.json();
 }
 
 export async function deleteConversation(
   conversationId: string,
 ): Promise<void> {
-  await api(`/chat/conversations/${conversationId}`, { method: "DELETE" });
+  await apiJson<void>(`/chat/conversations/${conversationId}`, {
+    method: "DELETE",
+  });
 }
 
 /* ------------------------------- Finexer -------------------------------- */
@@ -183,14 +275,11 @@ export type FinexerConnectLink = {
 };
 
 export async function fetchFinexerConnectLink(): Promise<FinexerConnectLink> {
-  const res = await api("/finexer/connect-link", { method: "POST" });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Finexer connect-link failed: ${text}`);
-  }
-  return res.json();
+  return apiJson<FinexerConnectLink>("/finexer/connect-link", {
+    method: "POST",
+  });
 }
 
 export async function resetFinexer(): Promise<void> {
-  await api("/finexer/reset", { method: "POST" });
+  await apiJson<void>("/finexer/reset", { method: "POST" });
 }
