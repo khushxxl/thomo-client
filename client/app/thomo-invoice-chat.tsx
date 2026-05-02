@@ -1,51 +1,111 @@
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  ScrollView,
-  Pressable,
-  TextInput,
+  FlatList,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  TextInput,
+  View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { TextWrapper } from "@/components/text-wrapper";
-import { ChevronLeftIcon } from "@/components/icons/chevron-left-icon";
 import * as Haptics from "expo-haptics";
-import Svg, { Path, Circle } from "react-native-svg";
+import Animated, {
+  FadeInDown,
+  FadeInUp,
+  LinearTransition,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
+import Svg, { Circle, Path } from "react-native-svg";
+import { ChevronLeftIcon } from "@/components/icons/chevron-left-icon";
+import { TextWrapper } from "@/components/text-wrapper";
+import { getErrorMessage } from "@/lib/api";
+import {
+  buildInvoiceClientSuggestions,
+  buildInvoiceDraftFromSuggestion,
+  buildManualClientDraft,
+  type InvoiceClientSuggestion,
+} from "@/lib/invoice-ai";
+import type { InvoiceDraft } from "@/lib/invoice-draft";
+import { INVOICE_RADIUS } from "@/lib/invoice-ui";
+import { listInvoices } from "@/lib/invoices";
+import { useThomo } from "@/lib/thomo-context";
 
-interface Message {
+type Message = {
   id: string;
   text: string;
-  isUser: boolean;
-  isTyping?: boolean;
+  role: "user" | "assistant";
+  typing?: boolean;
+};
+
+type Stage = "booting" | "choose-client" | "manual-client" | "draft-ready";
+
+function makeId(prefix: string) {
+  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function responseDelay(text: string) {
+  return Math.min(Math.max(720, 460 + text.length * 9), 1400);
 }
 
 function ThomoAvatar({ size = 32 }: { size?: number }) {
+  const scale = useSharedValue(1);
+  const glow = useSharedValue(0.12);
+
+  useEffect(() => {
+    scale.value = withRepeat(
+      withSequence(withTiming(1.04, { duration: 1400 }), withTiming(1, { duration: 1400 })),
+      -1,
+      true,
+    );
+    glow.value = withRepeat(
+      withSequence(withTiming(0.22, { duration: 1200 }), withTiming(0.12, { duration: 1200 })),
+      -1,
+      true,
+    );
+  }, [glow, scale]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    shadowOpacity: glow.value,
+  }));
+
   return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: "#1A1A1A",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
+    <Animated.View
+      style={[
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: "#171717",
+          alignItems: "center",
+          justifyContent: "center",
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowRadius: 12,
+          elevation: 2,
+        },
+        animatedStyle,
+      ]}
     >
-      <TextWrapper weight="medium" style={{ fontSize: 10, color: "#fff" }}>
+      <TextWrapper weight="medium" style={{ fontSize: 10, color: "#FFFFFF" }}>
         th.
       </TextWrapper>
-    </View>
+    </Animated.View>
   );
 }
 
-function SendIcon({ size = 24 }: { size?: number }) {
+function SendIcon({ size = 20 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d="M12 4L12 20M12 4L6 10M12 4L18 10"
-        stroke="#1A1A1A"
+        stroke="#171717"
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -94,265 +154,579 @@ function MicIcon({ size = 20 }: { size?: number }) {
         strokeWidth={1.3}
         strokeLinecap="round"
       />
-      <Path
-        d="M10 15V18.5"
-        stroke="#999"
-        strokeWidth={1.3}
-        strokeLinecap="round"
-      />
+      <Path d="M10 15V18.5" stroke="#999" strokeWidth={1.3} strokeLinecap="round" />
     </Svg>
   );
 }
 
-export default function ThomoInvoiceChatScreen() {
-  const [inputText, setInputText] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [hasStarted, setHasStarted] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
-
-  const handleBack = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.back();
-  };
-
-  const handleSend = () => {
-    if (!inputText.trim()) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      text: inputText.trim(),
-      isUser: true,
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    setInputText("");
-    setHasStarted(true);
-
-    // Simulate Thomo typing then responding
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `typing-${Date.now()}`,
-          text: "",
-          isUser: false,
-          isTyping: true,
-        },
-      ]);
-    }, 500);
-
-    setTimeout(() => {
-      setMessages((prev) => {
-        const withoutTyping = prev.filter((m) => !m.isTyping);
-        return [
-          ...withoutTyping,
-          {
-            id: `reply-${Date.now()}`,
-            text: `Got it. Invoice for John — £883 due Friday.`,
-            isUser: false,
-          },
-        ];
-      });
-
-      // After a beat, show "Creating invoice for..." then navigate
-      setTimeout(() => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `creating-${Date.now()}`,
-            text: "Creating invoice for...",
-            isUser: false,
-          },
-        ]);
-
-        setTimeout(() => {
-          router.replace({
-            pathname: "/invoice-created",
-            params: {
-              clientName: "Normal Kyne",
-              amount: "£437.60",
-              status: "paid",
-            },
-          });
-        }, 1500);
-      }, 1000);
-    }, 2000);
-  };
+function TypingDot({ index }: { index: number }) {
+  const opacity = useSharedValue(0.25);
+  const translateY = useSharedValue(0);
 
   useEffect(() => {
-    scrollRef.current?.scrollToEnd({ animated: true });
-  }, [messages]);
+    opacity.value = withRepeat(
+      withDelay(
+        index * 120,
+        withSequence(
+          withTiming(1, { duration: 260 }),
+          withTiming(0.25, { duration: 260 }),
+        ),
+      ),
+      -1,
+      false,
+    );
+    translateY.value = withRepeat(
+      withDelay(
+        index * 120,
+        withSequence(
+          withTiming(-2, { duration: 260 }),
+          withTiming(0, { duration: 260 }),
+        ),
+      ),
+      -1,
+      false,
+    );
+  }, [index, opacity, translateY]);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-white"
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <StatusBar style="dark" />
+    <Animated.View
+      style={[
+        {
+          width: 7,
+          height: 7,
+          borderRadius: 999,
+          backgroundColor: "#FFFFFF",
+        },
+        style,
+      ]}
+    />
+  );
+}
 
-      {/* Header */}
-      <View
-        style={{ paddingTop: 70, paddingBottom: 16, paddingHorizontal: 20 }}
+function TypingBubble() {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 22 }}>
+      <TypingDot index={0} />
+      <TypingDot index={1} />
+      <TypingDot index={2} />
+    </View>
+  );
+}
+
+function extractManualClient(input: string): { name: string; email?: string } {
+  const emailMatch = input.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  const email = emailMatch?.[0];
+  const name = input.replace(email ?? "", "").replace(/[,|-]+/g, " ").trim();
+  return {
+    name: name || input.trim(),
+    email: email || undefined,
+  };
+}
+
+function SuggestionCard({
+  suggestion,
+  onPress,
+}: {
+  suggestion: InvoiceClientSuggestion;
+  onPress: () => void;
+}) {
+  return (
+    <Animated.View entering={FadeInUp.duration(220)} layout={LinearTransition.duration(220)}>
+      <Pressable
+        onPress={onPress}
+        style={{
+          borderRadius: INVOICE_RADIUS.surface,
+          borderWidth: 1,
+          borderColor: "#ECECEC",
+          backgroundColor: "#FFFFFF",
+          padding: 14,
+          marginBottom: 10,
+        }}
       >
         <View
-          className="flex-row items-center justify-center"
-          style={{ position: "relative" }}
+          style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}
         >
-          <Pressable
-            onPress={handleBack}
-            hitSlop={12}
-            style={{ position: "absolute", left: 0 }}
-          >
-            <ChevronLeftIcon size={24} color="#1A1A1A" strokeWidth={2.5} />
-          </Pressable>
-          <TextWrapper
-            weight="medium"
-            style={{ fontSize: 17, color: "#1A1A1A" }}
-          >
-            Thomo Chat
-          </TextWrapper>
-        </View>
-      </View>
-
-      {/* Messages */}
-      <ScrollView
-        ref={scrollRef}
-        className="flex-1"
-        contentContainerStyle={{
-          paddingHorizontal: 20,
-          paddingBottom: 16,
-          flexGrow: 1,
-          justifyContent: messages.length === 0 ? "center" : "flex-end",
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        {messages.length === 0 && (
-          <View className="items-center" style={{ paddingBottom: 60 }}>
-            <ThomoAvatar size={48} />
-            <TextWrapper
-              weight="medium"
-              style={{ fontSize: 16, color: "#1A1A1A", marginTop: 12 }}
-            >
-              Create an invoice
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <TextWrapper weight="medium" style={{ fontSize: 15, color: "#171717" }}>
+              {suggestion.name}
             </TextWrapper>
             <TextWrapper
               weight="regular"
-              style={{
-                fontSize: 14,
-                color: "#999",
-                marginTop: 4,
-                textAlign: "center",
-              }}
+              style={{ fontSize: 13, color: "#71717A", marginTop: 4 }}
             >
-              Tell Thomo who to invoice and how much
+              {suggestion.company || suggestion.email || suggestion.note || "Recent client"}
             </TextWrapper>
           </View>
-        )}
-
-        {messages.map((msg) => (
           <View
-            key={msg.id}
             style={{
-              alignSelf: msg.isUser ? "flex-end" : "flex-start",
-              marginBottom: 12,
-              maxWidth: "80%",
-              flexDirection: msg.isUser ? "row" : "row",
-              alignItems: "flex-end",
-              gap: 8,
+              borderRadius: INVOICE_RADIUS.control,
+              backgroundColor: "#F4F4F5",
+              paddingHorizontal: 10,
+              paddingVertical: 6,
             }}
           >
-            {!msg.isUser && <ThomoAvatar size={28} />}
-            <View
-              style={{
-                backgroundColor: msg.isUser ? "#F0F0F0" : "#1A1A1A",
-                borderRadius: 18,
-                paddingHorizontal: 16,
-                paddingVertical: 12,
-              }}
-            >
-              {msg.isTyping ? (
-                <TextWrapper
-                  weight="regular"
-                  style={{ fontSize: 15, color: "#999" }}
-                >
-                  ...
-                </TextWrapper>
-              ) : (
-                <TextWrapper
-                  weight="regular"
-                  style={{
-                    fontSize: 15,
-                    color: msg.isUser ? "#1A1A1A" : "#fff",
-                    lineHeight: 21,
-                  }}
-                >
-                  {msg.text}
-                </TextWrapper>
-              )}
+            <TextWrapper weight="medium" style={{ fontSize: 11, color: "#171717" }}>
+              {suggestion.source === "combined"
+                ? "History"
+                : suggestion.source === "invoice"
+                  ? "Invoice"
+                  : "Txn"}
+            </TextWrapper>
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function ActionButton({
+  label,
+  onPress,
+  primary = false,
+}: {
+  label: string;
+  onPress: () => void;
+  primary?: boolean;
+}) {
+  return (
+    <Animated.View entering={FadeInUp.duration(220)} layout={LinearTransition.duration(220)}>
+      <Pressable
+        onPress={onPress}
+        style={{
+          borderRadius: INVOICE_RADIUS.control,
+          backgroundColor: primary ? "#171717" : "#FFFFFF",
+          borderWidth: primary ? 0 : 1,
+          borderColor: "#ECECEC",
+          paddingVertical: 14,
+          alignItems: "center",
+          marginBottom: 10,
+        }}
+      >
+        <TextWrapper
+          weight="medium"
+          style={{ fontSize: 15, color: primary ? "#FFFFFF" : "#171717" }}
+        >
+          {label}
+        </TextWrapper>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function MessageRow({ message }: { message: Message }) {
+  return (
+    <Animated.View
+      entering={FadeInDown.duration(220)}
+      layout={LinearTransition.duration(220)}
+      style={{
+        alignSelf: message.role === "user" ? "flex-end" : "flex-start",
+        flexDirection: "row",
+        alignItems: "flex-end",
+        gap: 8,
+        marginBottom: 16,
+        maxWidth: "86%",
+      }}
+    >
+      {message.role === "assistant" ? <ThomoAvatar size={28} /> : null}
+      <View
+        style={{
+          backgroundColor: message.role === "user" ? "#F4F4F5" : "#171717",
+          borderRadius: INVOICE_RADIUS.surface,
+          borderBottomRightRadius: message.role === "user" ? 6 : INVOICE_RADIUS.surface,
+          borderBottomLeftRadius: message.role === "assistant" ? 6 : INVOICE_RADIUS.surface,
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: message.role === "assistant" ? 0.06 : 0.03,
+          shadowRadius: 8,
+          elevation: 1,
+        }}
+      >
+        {message.typing ? (
+          <TypingBubble />
+        ) : (
+          <TextWrapper
+            weight="regular"
+            style={{
+              fontSize: 15,
+              lineHeight: 22,
+              color: message.role === "user" ? "#171717" : "#FFFFFF",
+            }}
+          >
+            {message.text}
+          </TextWrapper>
+        )}
+      </View>
+    </Animated.View>
+  );
+}
+
+export default function ThomoInvoiceChatScreen() {
+  const { transactions, profile } = useThomo();
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [stage, setStage] = useState<Stage>("booting");
+  const [screenError, setScreenError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<InvoiceClientSuggestion[]>([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<InvoiceClientSuggestion | null>(
+    null,
+  );
+  const [pendingDraft, setPendingDraft] = useState<InvoiceDraft | null>(null);
+  const listRef = useRef<FlatList<Message>>(null);
+  const timerIds = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const clearTimers = useCallback(() => {
+    timerIds.current.forEach(clearTimeout);
+    timerIds.current = [];
+  }, []);
+
+  const queueAssistantReply = useCallback(
+    (text: string, onDone?: () => void, delay = responseDelay(text)) => {
+      const typingId = makeId("typing");
+      setMessages((prev) => [{ id: typingId, role: "assistant", text: "", typing: true }, ...prev]);
+
+      const timer = setTimeout(() => {
+        setMessages((prev) => [
+          { id: makeId("assistant"), role: "assistant", text },
+          ...prev.filter((message) => message.id !== typingId),
+        ]);
+        onDone?.();
+      }, delay);
+
+      timerIds.current.push(timer);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    setMessages([
+      {
+        id: makeId("boot_user"),
+        role: "user",
+        text: "Can you please help me create an invoice?",
+      },
+    ]);
+
+    let cancelled = false;
+
+    const boot = async () => {
+      setStage("booting");
+      setScreenError(null);
+      clearTimers();
+
+      try {
+        const invoices = await listInvoices();
+        if (cancelled) return;
+
+        const nextSuggestions = buildInvoiceClientSuggestions(invoices, transactions, profile);
+        setSuggestions(nextSuggestions);
+
+        queueAssistantReply(
+          nextSuggestions.length > 0
+            ? "Yeah, sure. Choose a client from your recent history, or enter one manually. I’ll prepare the draft first, then you can add optional branding, payment details, and review the final invoice template."
+            : "Yeah, sure. I couldn't find recent clients yet, so enter the client manually. I’ll prepare the draft first, then you can add optional branding, payment details, and review the final invoice template.",
+          () => {
+            if (!cancelled) {
+              setStage(nextSuggestions.length > 0 ? "choose-client" : "manual-client");
+            }
+          },
+        );
+      } catch (err) {
+        if (cancelled) return;
+
+        queueAssistantReply(
+          "I can still help you create it manually. Type the client name or paste their email, and I’ll prepare the invoice draft.",
+          () => {
+            if (!cancelled) setStage("manual-client");
+          },
+        );
+        setScreenError(getErrorMessage(err, "Could not load invoice history."));
+      }
+    };
+
+    void boot();
+
+    return () => {
+      cancelled = true;
+      clearTimers();
+    };
+  }, [clearTimers, profile, queueAssistantReply, transactions]);
+
+  const composerPlaceholder = useMemo(() => {
+    if (stage === "booting") return "Thomo is preparing the invoice flow...";
+    if (stage === "manual-client") return "Type the client name or add an email...";
+    return "Reply here...";
+  }, [stage]);
+
+  const openDraft = useCallback((draft: InvoiceDraft) => {
+    router.replace({
+      pathname: "/create-invoice",
+      params: {
+        source: "thomo",
+        draft: JSON.stringify(draft),
+      },
+    });
+  }, []);
+
+  const appendUserMessage = useCallback((text: string) => {
+    setMessages((prev) => [{ id: makeId("user"), role: "user", text }, ...prev]);
+  }, []);
+
+  const handleSuggestionSelect = useCallback(
+    (suggestion: InvoiceClientSuggestion) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      appendUserMessage(suggestion.name);
+
+      const draft = buildInvoiceDraftFromSuggestion(suggestion, profile);
+      setSelectedSuggestion(suggestion);
+      setPendingDraft(draft);
+      setStage("booting");
+
+      queueAssistantReply(
+        suggestion.source === "invoice" || suggestion.source === "combined"
+          ? `Perfect. I pulled the latest invoice context for ${suggestion.name} and prepared a draft. The next screen keeps the required fields up front, then lets you add logo branding and payment information only if you want them.`
+          : `Perfect. I found recent activity for ${suggestion.name} and prepared a draft. The next screen keeps the required fields up front, then lets you add logo branding and payment information only if you want them.`,
+        () => setStage("draft-ready"),
+      );
+    },
+    [appendUserMessage, profile, queueAssistantReply],
+  );
+
+  const handleManualIntent = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    appendUserMessage("Enter manually");
+    setStage("booting");
+    queueAssistantReply(
+      "No problem. Send me the client name, and if you already have it, include their email too.",
+      () => setStage("manual-client"),
+      680,
+    );
+  }, [appendUserMessage, queueAssistantReply]);
+
+  const handleSend = useCallback(() => {
+    if (!input.trim() || stage === "booting") return;
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    const content = input.trim();
+    appendUserMessage(content);
+    setInput("");
+    setStage("booting");
+
+    const manual = extractManualClient(content);
+    const draft = buildManualClientDraft(manual.name, profile);
+    if (manual.email) {
+      draft.client_email = manual.email;
+    }
+
+    setPendingDraft(draft);
+    setSelectedSuggestion(null);
+
+    queueAssistantReply(
+      `Done. I prepared a draft for ${draft.client_name}. Review it now, add optional logo/payment details if needed, and check the final invoice template before creating it.`,
+      () => setStage("draft-ready"),
+    );
+  }, [appendUserMessage, input, profile, queueAssistantReply, stage]);
+
+  const blankDraftFromSuggestion = selectedSuggestion
+    ? buildManualClientDraft(selectedSuggestion.name, profile)
+    : null;
+
+  useEffect(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [messages, stage]);
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: "#FFFFFF" }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+    >
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar style="dark" />
+
+      <View
+        style={{
+          paddingTop: 60,
+          paddingBottom: 16,
+          paddingHorizontal: 20,
+          borderBottomWidth: 1,
+          borderBottomColor: "#F5F5F5",
+        }}
+      >
+        <View
+          style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", height: 44 }}
+        >
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.replace("/(tabs)/invoices");
+            }}
+            hitSlop={12}
+            style={{
+              position: "absolute",
+              left: 0,
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: "#F9F9F9",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <ChevronLeftIcon size={20} color="#171717" strokeWidth={2.5} />
+          </Pressable>
+          <View style={{ alignItems: "center" }}>
+            <TextWrapper weight="bold" style={{ fontSize: 17, color: "#171717" }}>
+              Thomo AI
+            </TextWrapper>
+            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+              <View
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: "#22C55E",
+                  marginRight: 4,
+                }}
+              />
+              <TextWrapper weight="medium" style={{ fontSize: 11, color: "#71717A" }}>
+                Online
+              </TextWrapper>
             </View>
           </View>
-        ))}
-      </ScrollView>
+        </View>
+      </View>
 
-      {/* Input bar */}
+      <FlatList
+        ref={listRef}
+        data={messages}
+        inverted
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => <MessageRow message={item} />}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{
+          paddingHorizontal: 20,
+          paddingTop: 18,
+          paddingBottom: 10,
+        }}
+        showsVerticalScrollIndicator={false}
+        style={{ flex: 1 }}
+      />
+
+      <View style={{ paddingHorizontal: 20, paddingTop: 6 }}>
+        {screenError ? (
+          <Animated.View entering={FadeInUp.duration(220)}>
+            <View
+              style={{
+                borderRadius: INVOICE_RADIUS.surface,
+                backgroundColor: "#FEF2F2",
+                borderWidth: 1,
+                borderColor: "#FECACA",
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                marginBottom: 12,
+              }}
+            >
+              <TextWrapper weight="medium" style={{ fontSize: 13, color: "#B91C1C" }}>
+                {screenError}
+              </TextWrapper>
+            </View>
+          </Animated.View>
+        ) : null}
+
+        {stage === "choose-client" ? (
+          <Animated.View entering={FadeInUp.duration(220)} layout={LinearTransition.duration(220)}>
+            {suggestions.map((suggestion) => (
+              <SuggestionCard
+                key={suggestion.id}
+                suggestion={suggestion}
+                onPress={() => handleSuggestionSelect(suggestion)}
+              />
+            ))}
+            <ActionButton label="Enter client manually" onPress={handleManualIntent} />
+          </Animated.View>
+        ) : null}
+
+        {stage === "draft-ready" && pendingDraft ? (
+          <Animated.View entering={FadeInUp.duration(220)} layout={LinearTransition.duration(220)}>
+            <ActionButton label="Review draft" primary onPress={() => openDraft(pendingDraft)} />
+            {blankDraftFromSuggestion ? (
+              <ActionButton
+                label="Start blank instead"
+                onPress={() => openDraft(blankDraftFromSuggestion)}
+              />
+            ) : null}
+          </Animated.View>
+        ) : null}
+      </View>
+
       <View
         style={{
           paddingHorizontal: 20,
-          paddingBottom: 36,
           paddingTop: 12,
-          borderTopWidth: 1,
-          borderTopColor: "#F0F0F0",
+          paddingBottom: 28,
         }}
       >
         <View
           style={{
-            flexDirection: "row",
-            alignItems: "center",
             backgroundColor: "#F5F5F5",
-            borderRadius: 24,
+            borderRadius: INVOICE_RADIUS.surface,
             paddingHorizontal: 16,
-            paddingVertical: 12,
+            paddingTop: 14,
+            paddingBottom: 14,
           }}
         >
-          <View
-            className="flex-row items-center"
-            style={{ gap: 12, marginRight: 12 }}
-          >
-            <GlobeIcon size={20} />
-            <AttachIcon size={20} />
-            <MicIcon size={20} />
-          </View>
           <TextInput
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="Analyze my expenses..."
-            placeholderTextColor="#999"
+            value={input}
+            onChangeText={setInput}
+            placeholder={composerPlaceholder}
+            placeholderTextColor="#999999"
+            editable={stage !== "booting"}
             style={{
-              flex: 1,
               fontSize: 15,
-              color: "#1A1A1A",
+              color: "#171717",
               fontFamily: "NeueMontreal-Regular",
               paddingVertical: 0,
+              marginBottom: 12,
             }}
             onSubmitEditing={handleSend}
             returnKeyType="send"
           />
-          <Pressable onPress={handleSend} hitSlop={8} style={{ marginLeft: 8 }}>
-            <View
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                borderWidth: 1.5,
-                borderColor: "#1A1A1A",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <SendIcon size={16} />
+          <View
+            style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+              <GlobeIcon size={20} />
+              <AttachIcon size={20} />
+              <MicIcon size={20} />
             </View>
-          </Pressable>
+            <Pressable onPress={handleSend} hitSlop={8} disabled={stage === "booting"}>
+              <View
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 17,
+                  borderWidth: 1.5,
+                  borderColor: "#171717",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "#FFFFFF",
+                  opacity: stage === "booting" ? 0.45 : 1,
+                }}
+              >
+                <SendIcon size={14} />
+              </View>
+            </Pressable>
+          </View>
         </View>
       </View>
     </KeyboardAvoidingView>

@@ -14,8 +14,10 @@ import {
   fetchBalance,
   fetchStatus,
   fetchTransactions,
+  fetchProfile,
   type ApiBalance,
   type ApiTransaction,
+  type Profile,
 } from "@/lib/api";
 import { calculateVatLiability, type VatBreakdown } from "@/lib/vat";
 
@@ -24,6 +26,7 @@ type ThomoState = {
 
   balance: ApiBalance | null;
   transactions: ApiTransaction[];
+  profile: Profile | null;
   vat: VatBreakdown | null;
 
   balanceLoading: boolean;
@@ -44,6 +47,7 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [balance, setBalance] = useState<ApiBalance | null>(null);
   const [transactions, setTransactions] = useState<ApiTransaction[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,6 +79,15 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadProfile = useCallback(async () => {
+    try {
+      const prof = await fetchProfile();
+      setProfile(prof);
+    } catch (err) {
+      console.error("Profile load failed:", err);
+    }
+  }, []);
+
   const loadAll = useCallback(async () => {
     setError(null);
     try {
@@ -82,10 +95,11 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       setConnected(isConnected);
 
       if (isConnected) {
-        await Promise.all([loadBalance(), loadTransactions()]);
+        await Promise.all([loadBalance(), loadTransactions(), loadProfile()]);
       } else {
         setBalance(null);
         setTransactions([]);
+        setProfile(null);
       }
     } catch (err) {
       console.error("ThomoContext load failed:", err);
@@ -94,7 +108,7 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       setTransactions([]);
       setError(getErrorMessage(err, "Could not load your bank data."));
     }
-  }, [loadBalance, loadTransactions]);
+  }, [loadBalance, loadTransactions, loadProfile]);
 
   const authLoading = useAuth().loading;
 
@@ -107,6 +121,8 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       setConnected(false);
       setBalance(null);
       setTransactions([]);
+      setProfile(null);
+      setError(null);
       return;
     }
     loadAll();
@@ -118,10 +134,11 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       const { connected: isConnected } = await fetchStatus();
       setConnected(isConnected);
       if (isConnected) {
-        await Promise.all([loadBalance(), loadTransactions()]);
+        await Promise.all([loadBalance(), loadTransactions(), loadProfile()]);
       } else {
         setBalance(null);
         setTransactions([]);
+        setProfile(null);
       }
     } catch (err) {
       console.error("Refresh failed:", err);
@@ -132,7 +149,7 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
     } finally {
       setRefreshing(false);
     }
-  }, [loadBalance, loadTransactions]);
+  }, [loadBalance, loadTransactions, loadProfile]);
 
   const markConnected = useCallback(async () => {
     setConnected(true);
@@ -159,6 +176,7 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       connected,
       balance,
       transactions,
+      profile,
       vat,
       balanceLoading,
       transactionsLoading,
@@ -172,6 +190,7 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       connected,
       balance,
       transactions,
+      profile,
       vat,
       balanceLoading,
       transactionsLoading,

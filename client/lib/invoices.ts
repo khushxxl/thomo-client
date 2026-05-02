@@ -1,6 +1,6 @@
 import { apiJson } from "@/lib/api";
 
-export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "cancelled";
+export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "cancelled" | "pending";
 
 export type Invoice = {
   id: string;
@@ -57,6 +57,7 @@ export async function createInvoice(
 ): Promise<Invoice> {
   return apiJson<Invoice>("/invoices", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
 }
@@ -67,7 +68,20 @@ export async function updateInvoice(
 ): Promise<Invoice> {
   return apiJson<Invoice>(`/invoices/${id}`, {
     method: "PATCH",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+  });
+}
+
+export async function sendInvoice(id: string): Promise<Invoice> {
+  return apiJson<Invoice>(`/invoices/${id}/send`, {
+    method: "POST",
+  });
+}
+
+export async function markInvoicePaid(id: string): Promise<Invoice> {
+  return apiJson<Invoice>(`/invoices/${id}/mark-paid`, {
+    method: "POST",
   });
 }
 

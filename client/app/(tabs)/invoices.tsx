@@ -6,266 +6,201 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TextWrapper } from "@/components/text-wrapper";
 import { Pressable3D } from "@/components/pressable-3d";
-import * as Haptics from "expo-haptics";
-import Svg, { Path, Rect, Line } from "react-native-svg";
-import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from "@gorhom/bottom-sheet";
 import {
-  listInvoices,
+  CalendarIcon,
+  PlusIcon,
+  DocIcon,
+  ThomoSmallIcon,
+} from "@/components/icons";
+import * as Haptics from "expo-haptics";
+import Svg, { Line } from "react-native-svg";
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
+import { InvoiceStatusBadge } from "@/components/invoice/status-badge";
+import { INVOICE_RADIUS } from "@/lib/invoice-ui";
+import {
   formatInvoiceAmount,
   invoiceDueText,
+  listInvoices,
   type Invoice,
   type InvoiceStatus,
 } from "@/lib/invoices";
-import { getErrorMessage } from "@/lib/api";
+import { parseInvoiceDraftFromNotes } from "@/lib/invoice-draft";
 
-const TABS = ["All", "Paid", "Pending", "Overdue", "Draft"] as const;
-
-const STATUS_COLORS: Record<InvoiceStatus, string> = {
-  overdue: "#F02E24",
-  paid: "#00A281",
-  pending: "#F2A41B",
-  sent: "#F2A41B",
-  draft: "#999",
-  cancelled: "#999",
-};
-
-function CalendarIcon({ size = 20 }: { size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
-      <Rect
-        x={2.5}
-        y={4}
-        width={15}
-        height={13}
-        rx={2}
-        stroke="#999"
-        strokeWidth={1.3}
-      />
-      <Line
-        x1={2.5}
-        y1={8}
-        x2={17.5}
-        y2={8}
-        stroke="#999"
-        strokeWidth={1.3}
-      />
-      <Line
-        x1={6.5}
-        y1={2.5}
-        x2={6.5}
-        y2={5.5}
-        stroke="#999"
-        strokeWidth={1.3}
-        strokeLinecap="round"
-      />
-      <Line
-        x1={13.5}
-        y1={2.5}
-        x2={13.5}
-        y2={5.5}
-        stroke="#999"
-        strokeWidth={1.3}
-        strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
-
-function PlusIcon({
-  size = 20,
-  color = "#fff",
-}: {
-  size?: number;
-  color?: string;
-}) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
-      <Path
-        d="M10 4V16M4 10H16"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
-
-function ThomoSmallIcon({ size = 28 }: { size?: number }) {
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: "#1A1A1A",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <TextWrapper weight="medium" style={{ fontSize: 11, color: "#fff" }}>
-        th.
-      </TextWrapper>
-    </View>
-  );
-}
-
-function DocIcon({ size = 24 }: { size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Rect
-        x={4}
-        y={2}
-        width={16}
-        height={20}
-        rx={2}
-        stroke="#999"
-        strokeWidth={1.5}
-      />
-      <Path
-        d="M8 7H16M8 11H16M8 15H12"
-        stroke="#999"
-        strokeWidth={1.5}
-        strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
+const TABS = ["All", "Paid", "Pending", "Overdue", "Drafts",] as const;
 
 function initials(name: string): string {
   return name
     .split(" ")
-    .map((w) => w[0])
+    .map((word) => word[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
 }
 
-function InvoiceCard({ invoice }: { invoice: Invoice }) {
-  const statusLabel =
-    invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1);
-  const dueText = invoiceDueText(invoice);
-  const statusColor = STATUS_COLORS[invoice.status] ?? "#999";
+function avatarTheme(name: string): { bg: string; fg: string } {
+  const themes = [
+    { bg: "#4867F7", fg: "#FFFFFF" },
+    { bg: "#0B0B0F", fg: "#FFFFFF" },
+    { bg: "#E8D1BF", fg: "#3B2419" },
+    { bg: "#D9E8FF", fg: "#1D3557" },
+  ];
+  const code = name.charCodeAt(0) || 0;
+  return themes[code % themes.length];
+}
 
-  const handlePress = () => {
-    router.push({
-      pathname: "/invoice-detail",
-      params: {
-        id: invoice.id,
-        clientName: invoice.client_name,
-        amount: String(invoice.amount),
-        status: invoice.status,
-        invoiceNumber: invoice.id.slice(0, 8).toUpperCase(),
-        date: new Date(invoice.created_at).toLocaleDateString(undefined, {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }),
-      },
-    });
-  };
+function invoiceSubtitle(invoice: Invoice): string {
+  const draft = parseInvoiceDraftFromNotes(invoice);
+  const date = new Date(invoice.created_at).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return `${draft.invoice_number} • ${date}`;
+}
+
+function dueLabel(invoice: Invoice): string | null {
+  const due = invoiceDueText(invoice);
+  return due ? due.replace(/^Due /, "Due ") : null;
+}
+
+function InvoiceCard({ invoice }: { invoice: Invoice }) {
+  const theme = avatarTheme(invoice.client_name);
+  const dueText = dueLabel(invoice);
+  const showReminder = Boolean(
+    dueText && (invoice.status === "pending" || invoice.status === "overdue"),
+  );
 
   return (
-    <Pressable onPress={handlePress}>
-      <View className="mx-5 rounded-2xl bg-white" style={{ padding: 18 }}>
-        <View className="flex-row items-center" style={{ gap: 12 }}>
+    <Pressable
+      onPress={() =>
+        router.push({
+          pathname: "/invoice-detail",
+          params: {
+            id: invoice.id,
+            clientName: invoice.client_name,
+            amount: String(invoice.amount),
+            status: invoice.status,
+            invoiceNumber: invoice.id,
+            date: new Date(invoice.created_at).toISOString(),
+          },
+        })
+      }
+      style={{ marginBottom: 14 }}
+    >
+      <View
+        style={{
+          backgroundColor: "#FFFFFF",
+          borderRadius: INVOICE_RADIUS.surface,
+          paddingHorizontal: 14,
+          paddingVertical: 14,
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
           <View
             style={{
-              width: 48,
-              height: 48,
-              borderRadius: 24,
-              backgroundColor: "#4A90D9",
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: theme.bg,
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <TextWrapper
-              weight="medium"
-              style={{ fontSize: 16, color: "#fff" }}
-            >
+            <TextWrapper weight="medium" style={{ fontSize: 16, color: theme.fg }}>
               {initials(invoice.client_name)}
             </TextWrapper>
           </View>
 
-          <View style={{ flex: 1 }}>
-            <View className="flex-row items-center justify-between">
-              <TextWrapper
-                weight="medium"
-                style={{ fontSize: 16, color: "#1A1A1A" }}
-              >
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <TextWrapper weight="medium" style={{ fontSize: 16, color: "#111111" }}>
                 {invoice.client_name}
               </TextWrapper>
-              <TextWrapper
-                weight="medium"
-                style={{ fontSize: 16, color: "#1A1A1A" }}
-              >
+              <TextWrapper weight="medium" style={{ fontSize: 16, color: "#09090BCC" }}>
                 {formatInvoiceAmount(invoice.amount, invoice.currency)}
               </TextWrapper>
             </View>
-            <View className="flex-row items-center justify-between mt-1">
-              <TextWrapper
-                weight="regular"
-                style={{ fontSize: 13, color: "#999" }}
-              >
-                {new Date(invoice.created_at).toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginTop: 3,
+              }}
+            >
+              <TextWrapper weight="regular" style={{ fontSize: 12, color: "#71717A" }}>
+                {invoiceSubtitle(invoice)}
               </TextWrapper>
-              <TextWrapper
-                weight="medium"
-                style={{ fontSize: 13, color: statusColor }}
-              >
-                {statusLabel}
-              </TextWrapper>
+              <InvoiceStatusBadge status={invoice.status} />
             </View>
           </View>
         </View>
 
-        {dueText && (
+        {showReminder ? (
           <>
+            <Svg height="1" width="100%" style={{ marginTop: 14, marginBottom: 12 }}>
+              <Line
+                x1="0"
+                y1="0"
+                x2="1000"
+                y2="0"
+                stroke="#EFEFEF"
+                strokeWidth="2"
+                strokeDasharray="4, 4"
+              />
+            </Svg>
+
             <View
               style={{
-                marginTop: 14,
-                marginBottom: 14,
-                borderStyle: "dashed",
-                borderWidth: 0,
-                borderTopWidth: 1,
-                borderColor: "#DDD",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
               }}
-            />
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center" style={{ gap: 8 }}>
-                <CalendarIcon size={18} />
-                <TextWrapper
-                  weight="regular"
-                  style={{ fontSize: 14, color: "#666" }}
-                >
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <CalendarIcon  />
+                <TextWrapper weight="regular" style={{ fontSize: 14, color: "#4A4A4E" }}>
                   {dueText}
                 </TextWrapper>
               </View>
+
               <Pressable
                 style={{
-                  backgroundColor: "#1A1A1A",
-                  borderRadius: 8,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
+                  backgroundColor: "#262626",
+                  borderRadius: INVOICE_RADIUS.control,
+                  paddingHorizontal: 14,
+                  paddingVertical: 9,
                 }}
               >
-                <TextWrapper
-                  weight="medium"
-                  style={{ fontSize: 13, color: "#fff" }}
-                >
+                <TextWrapper weight="medium" style={{ fontSize: 13, color: "#FFFFFF" }}>
                   Email Reminder
                 </TextWrapper>
               </Pressable>
             </View>
           </>
-        )}
+        ) : null}
       </View>
     </Pressable>
   );
@@ -274,28 +209,57 @@ function InvoiceCard({ invoice }: { invoice: Invoice }) {
 type CreateOption = "thomo" | "manual";
 
 export default function InvoicesScreen() {
-  const [activeTab, setActiveTab] = useState<string>("All");
+  const insets = useSafeAreaInsets();
+  const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("All");
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tabLayouts, setTabLayouts] = useState<Record<string, { x: number; width: number }>>({});
+  const translateX = useSharedValue(0);
 
   const sheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => ["38%"], []);
 
+  useEffect(() => {
+    const layout = tabLayouts[activeTab];
+    if (layout) {
+      translateX.value = withTiming(layout.x + (layout.width - 64) / 2, {
+        duration: 300,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1), // Smooth ease-in-out
+      });
+    }
+  }, [activeTab, tabLayouts, translateX]);
+
+  const animatedIndicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+    opacity: tabLayouts[activeTab] ? 1 : 0,
+  }));
+
+  const visibleInvoices = useMemo(
+    () =>
+      invoices.filter((invoice) => {
+        if (activeTab === "All") return true;
+        const status = activeTab === "Drafts" ? "draft" : activeTab.toLowerCase();
+        return invoice.status === status;
+      }),
+    [activeTab, invoices],
+  );
+
   const loadInvoices = useCallback(async () => {
     try {
+      const status = activeTab === "Drafts" ? "draft" : activeTab.toLowerCase();
       const filter =
         activeTab === "All"
           ? undefined
-          : (activeTab.toLowerCase() as InvoiceStatus);
+          : (status as InvoiceStatus);
       const data = await listInvoices(filter);
       setInvoices(data);
       setError(null);
     } catch (err) {
       console.error("Failed to load invoices:", err);
       setInvoices([]);
-      setError(getErrorMessage(err, "Could not load invoices."));
+      setError("Could not load invoices right now.");
     } finally {
       setLoading(false);
     }
@@ -305,6 +269,12 @@ export default function InvoicesScreen() {
     setLoading(true);
     loadInvoices();
   }, [loadInvoices]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadInvoices();
+    }, [loadInvoices]),
+  );
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -321,166 +291,195 @@ export default function InvoicesScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     sheetRef.current?.close();
     if (option === "thomo") {
-      router.push("/thomo-chat");
+      router.push("/thomo-invoice-chat");
     } else {
       router.push("/create-invoice");
     }
   };
 
-  const renderBackdrop = useCallback(
-    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
-      <BottomSheetBackdrop
-        {...props}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        opacity={0.5}
-      />
-    ),
-    [],
-  );
-
   return (
-    <View className="flex-1 bg-[#F9F9F9]">
+    <View style={{ flex: 1, backgroundColor: "#F7F7F5" }}>
       <StatusBar style="dark" />
 
       <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingTop: Math.max(insets.top + 10, 22),
+          paddingBottom: Math.max(insets.bottom + 98, 116),
+        }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
-        {/* Header */}
-        <View className="flex-row items-center justify-between px-6 pt-20 pb-2">
-          <TextWrapper
-            weight="medium"
-            style={{ fontSize: 24, color: "#1A1A1A" }}
-          >
+        <View
+          style={{
+            paddingHorizontal: 20,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <TextWrapper weight="medium" style={{ fontSize: 24, color: "#171717" }}>
             Invoices
           </TextWrapper>
+
           <Pressable
             onPress={openCreate}
             style={{
+              backgroundColor: "#FFFFFF",
+              borderRadius: INVOICE_RADIUS.control,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
               flexDirection: "row",
               alignItems: "center",
               gap: 6,
-              borderWidth: 1,
-              borderColor: "#E0E0E0",
-              borderRadius: 10,
-              paddingHorizontal: 14,
-              paddingVertical: 8,
             }}
           >
-            <PlusIcon size={14} color="#1A1A1A" />
-            <TextWrapper
-              weight="medium"
-              style={{ fontSize: 14, color: "#1A1A1A" }}
-            >
+            <PlusIcon size={14} color="#000000" />
+            <TextWrapper weight="regular" style={{ fontSize: 12, color: "#1F1F1F" }}>
               Invoice
             </TextWrapper>
           </Pressable>
         </View>
 
-        {/* Filter tabs */}
-        <View className="flex-row px-6 mt-4" style={{ gap: 24 }}>
-          {TABS.map((tab) => (
-            <Pressable key={tab} onPress={() => setActiveTab(tab)}>
-              <TextWrapper
-                weight={activeTab === tab ? "medium" : "regular"}
-                style={{
-                  fontSize: 15,
-                  color: activeTab === tab ? "#1A1A1A" : "#999",
-                  paddingBottom: 10,
+        <View style={{ flexDirection: "row", paddingHorizontal: 20, marginTop: 18, gap: 4 }}>
+          {TABS.map((tab) => {
+            const selected = activeTab === tab;
+            return (
+              <Pressable
+                key={tab}
+                onPress={() => setActiveTab(tab)}
+                onLayout={(e) => {
+                  const { x, width } = e.nativeEvent.layout;
+                  setTabLayouts((prev) => ({ ...prev, [tab]: { x, width } }));
                 }}
+                style={{ paddingBottom: 12, minWidth: 60, paddingHorizontal: 12, alignItems: "center" }}
               >
-                {tab}
-              </TextWrapper>
-              {activeTab === tab && (
-                <View
+                <TextWrapper
+                  weight={selected ? "medium" : "regular"}
                   style={{
-                    height: 2.5,
-                    backgroundColor: "#1A1A1A",
-                    borderRadius: 2,
+                    fontSize: 16,
+                    color: selected ? "#1F1F1F" : "#8C8C92",
                   }}
-                />
-              )}
-            </Pressable>
-          ))}
+                >
+                  {tab}
+                </TextWrapper>
+              </Pressable>
+            );
+          })}
+          <Animated.View
+            style={[
+              {
+                position: "absolute",
+                bottom: 0,
+                height: 3,
+                width: 64,
+                backgroundColor: "#1F1F1F",
+                borderRadius: 6,
+              },
+              animatedIndicatorStyle,
+            ]}
+          />
         </View>
 
-        <View style={{ height: 1, backgroundColor: "#EFEFEF" }} />
+        <View style={{ height: 1, backgroundColor: "#ECECEC" }} />
 
-        {/* Content */}
         {loading ? (
           <View style={{ paddingTop: 60, alignItems: "center" }}>
-            <ActivityIndicator color="#1A1A1A" />
+            <ActivityIndicator color="#171717" />
           </View>
         ) : error ? (
-          <View style={{ paddingTop: 60, alignItems: "center", paddingHorizontal: 24 }}>
+          <View style={{ paddingHorizontal: 20, paddingTop: 60 }}>
             <TextWrapper
               weight="regular"
-              style={{ fontSize: 15, color: "#888", textAlign: "center" }}
+              style={{ fontSize: 15, color: "#8C8C92", textAlign: "center" }}
             >
               {error}
             </TextWrapper>
           </View>
-        ) : invoices.length === 0 ? (
-          <View style={{ paddingTop: 60, alignItems: "center" }}>
-            <TextWrapper
-              weight="regular"
-              style={{ fontSize: 15, color: "#888" }}
-            >
-              {activeTab === "All"
-                ? "No invoices yet. Create one to get started."
-                : `No ${activeTab.toLowerCase()} invoices.`}
-            </TextWrapper>
-          </View>
         ) : (
           <>
-            <View className="px-6 pt-5 pb-3">
-              <TextWrapper
-                weight="regular"
-                style={{ fontSize: 14, color: "#999" }}
-              >
-                {invoices.length} invoice{invoices.length !== 1 && "s"}
+            <View style={{ paddingHorizontal: 20, marginTop: 14, marginBottom: 14 }}>
+              <TextWrapper weight="regular" style={{ fontSize: 14, color: "#71717A" }}>
+                Recent Activity
               </TextWrapper>
             </View>
 
-            <View style={{ gap: 12 }}>
-              {invoices.map((invoice) => (
-                <InvoiceCard key={invoice.id} invoice={invoice} />
-              ))}
+            <View style={{ paddingHorizontal: 20 }}>
+              {visibleInvoices.length > 0 ? (
+                visibleInvoices.map((invoice) => (
+                  <InvoiceCard key={invoice.id} invoice={invoice} />
+                ))
+              ) : (
+                <View
+                  style={{
+                    backgroundColor: "#FFFFFF",
+                    borderRadius: INVOICE_RADIUS.surface,
+                    paddingHorizontal: 18,
+                    paddingVertical: 28,
+                    alignItems: "center",
+                  }}
+                >
+                  <TextWrapper weight="medium" style={{ fontSize: 16, color: "#171717" }}>
+                    No invoices here
+                  </TextWrapper>
+                  <TextWrapper
+                    weight="regular"
+                    style={{
+                      marginTop: 8,
+                      fontSize: 14,
+                      lineHeight: 20,
+                      color: "#8C8C92",
+                      textAlign: "center",
+                    }}
+                  >
+                    {activeTab === "All"
+                      ? "Create your first invoice to start tracking receivables."
+                      : `No ${activeTab.toLowerCase()} invoices right now.`}
+                  </TextWrapper>
+                </View>
+              )}
             </View>
           </>
         )}
       </ScrollView>
 
-      {/* Add FAB */}
-      <View style={{ position: "absolute", bottom: 16, right: 20 }}>
-        <Pressable3D shadowColor="#000" onPress={openCreate}>
+      <View
+        style={{
+          position: "absolute",
+          right: 28,
+          bottom: 28,
+        }}
+      >
+        <Pressable3D shadowColor="transparent" onPress={openCreate}>
           <View
             style={{
-              width: 52,
-              height: 52,
-              borderRadius: 26,
-              backgroundColor: "#1A1A1A",
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              backgroundColor: "#262626",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <PlusIcon size={22} color="#fff" />
+            <PlusIcon size={24} color="#FFFFFF" />
           </View>
         </Pressable3D>
       </View>
 
-      {/* Create Invoice Sheet */}
       <BottomSheet
         ref={sheetRef}
         index={-1}
         snapPoints={snapPoints}
         enablePanDownToClose
-        backdropComponent={renderBackdrop}
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop
+            {...props}
+            appearsOnIndex={0}
+            disappearsOnIndex={-1}
+            opacity={0.5}
+          />
+        )}
         backgroundStyle={{ backgroundColor: "#FFFFFF" }}
         handleIndicatorStyle={{ backgroundColor: "#D4D4D4" }}
       >
@@ -491,10 +490,7 @@ export default function InvoicesScreen() {
             paddingBottom: 40,
           }}
         >
-          <TextWrapper
-            weight="medium"
-            style={{ fontSize: 20, color: "#1A1A1A" }}
-          >
+          <TextWrapper weight="medium" style={{ fontSize: 20, color: "#1A1A1A" }}>
             Create an invoice
           </TextWrapper>
           <TextWrapper
@@ -516,17 +512,14 @@ export default function InvoicesScreen() {
               alignItems: "center",
               borderWidth: 1.5,
               borderColor: "#E5E5E5",
-              borderRadius: 14,
+              borderRadius: INVOICE_RADIUS.surface,
               padding: 16,
               marginBottom: 12,
             }}
           >
             <ThomoSmallIcon size={32} />
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <TextWrapper
-                weight="medium"
-                style={{ fontSize: 15, color: "#1A1A1A" }}
-              >
+              <TextWrapper weight="medium" style={{ fontSize: 15, color: "#1A1A1A" }}>
                 Thomo AI
               </TextWrapper>
               <TextWrapper
@@ -536,10 +529,7 @@ export default function InvoicesScreen() {
                 Type once, Thomo takes over
               </TextWrapper>
             </View>
-            <TextWrapper
-              weight="regular"
-              style={{ fontSize: 18, color: "#999" }}
-            >
+            <TextWrapper weight="regular" style={{ fontSize: 18, color: "#999" }}>
               ›
             </TextWrapper>
           </Pressable>
@@ -551,16 +541,13 @@ export default function InvoicesScreen() {
               alignItems: "center",
               borderWidth: 1.5,
               borderColor: "#E5E5E5",
-              borderRadius: 14,
+              borderRadius: INVOICE_RADIUS.surface,
               padding: 16,
             }}
           >
             <DocIcon size={28} />
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <TextWrapper
-                weight="medium"
-                style={{ fontSize: 15, color: "#1A1A1A" }}
-              >
+              <TextWrapper weight="medium" style={{ fontSize: 15, color: "#1A1A1A" }}>
                 Create manually
               </TextWrapper>
               <TextWrapper
@@ -570,10 +557,7 @@ export default function InvoicesScreen() {
                 Fill in the details yourself
               </TextWrapper>
             </View>
-            <TextWrapper
-              weight="regular"
-              style={{ fontSize: 18, color: "#999" }}
-            >
+            <TextWrapper weight="regular" style={{ fontSize: 18, color: "#999" }}>
               ›
             </TextWrapper>
           </Pressable>

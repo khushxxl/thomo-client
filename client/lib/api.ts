@@ -65,11 +65,15 @@ async function getAccessToken(): Promise<string> {
 
 async function readErrorMessage(res: Response): Promise<string> {
   try {
-    const data = (await res.json()) as { error?: string; message?: string };
-    return data.error || data.message || `Request failed with ${res.status}`;
-  } catch {
     const text = await res.text();
-    return text || `Request failed with ${res.status}`;
+    try {
+      const data = JSON.parse(text) as { error?: string; message?: string };
+      return data.error || data.message || `Request failed with ${res.status}`;
+    } catch {
+      return text || `Request failed with ${res.status}`;
+    }
+  } catch {
+    return `Request failed with ${res.status}`;
   }
 }
 

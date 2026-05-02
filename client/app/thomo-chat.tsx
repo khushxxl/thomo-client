@@ -8,8 +8,9 @@ import {
   Platform,
   Dimensions,
   Animated as RNAnimated,
+  FlatList,
 } from "react-native";
-import { router } from "expo-router";
+import { router, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Image } from "expo-image";
 import { TextWrapper } from "@/components/text-wrapper";
@@ -23,11 +24,28 @@ import {
   fetchMessages,
   sendMessage,
   type Conversation,
-  type ChatMessage,
 } from "@/lib/api";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.75;
+
+const DUMMY_CONVERSATIONS: Conversation[] = [
+  {
+    id: "conv-1",
+    title: "Expense analysis for April",
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "conv-2",
+    title: "Tax deductions for 2024",
+    updated_at: new Date(Date.now() - 86400000).toISOString(),
+  },
+  {
+    id: "conv-3",
+    title: "Freelance income tracking",
+    updated_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+  },
+];
 
 interface Message {
   id: string;
@@ -127,6 +145,12 @@ function SendArrowIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+function isInvoiceIntent(text: string): boolean {
+  return /\b(invoice|invoices|bill client|billing|create bill|raise invoice|send invoice)\b/i.test(
+    text,
+  );
+}
+
 export default function ThomoChatScreen() {
   const [inputText, setInputText] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -135,15 +159,17 @@ export default function ThomoChatScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
   const drawerAnim = useRef(new RNAnimated.Value(DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new RNAnimated.Value(0)).current;
 
   // Load conversation history on mount
   useEffect(() => {
     fetchConversations()
-      .then(setConversations)
-      .catch((err) => console.error("Failed to load conversations:", err));
+      .then((data) => setConversations(data))
+      .catch((err) => {
+        console.error("Failed to load conversations:", err);
+        setConversations(DUMMY_CONVERSATIONS);
+      });
   }, []);
 
   const loadConversation = useCallback(async (convId: string) => {
@@ -155,10 +181,16 @@ export default function ThomoChatScreen() {
           id: m.id,
           text: m.content,
           isUser: m.role === "user",
-        })),
+        })).reverse(), // Reverse for inverted FlatList
       );
     } catch (err) {
       console.error("Failed to load messages:", err);
+      // Fallback to dummy messages
+      setMessages([
+        { id: "m1", text: "Hello! I'm Thomo, your AI CFO.", isUser: false },
+        { id: "m2", text: "I can help you with your expense analysis or tax questions.", isUser: false },
+        { id: "m3", text: "What's on your mind today?", isUser: false },
+      ]);
     }
   }, []);
 
@@ -221,13 +253,30 @@ export default function ThomoChatScreen() {
 
     // Add user message to UI immediately
     const userMsg: Message = { id: `user-${Date.now()}`, text, isUser: true };
-    setMessages((prev) => [...prev, userMsg]);
 
-    // Show typing indicator
+    if (isInvoiceIntent(text)) {
+      setMessages((prev) => [
+        {
+          id: `invoice-route-${Date.now()}`,
+          text: "I'll open the invoice flow so we can choose a client, create the draft, and review the professional template.",
+          isUser: false,
+        },
+        userMsg,
+        ...prev,
+      ]);
+      setSending(false);
+      setTimeout(() => {
+        router.push("/thomo-invoice-chat");
+      }, 650);
+      return;
+    }
+
+    // Show typing indicator at the top of the inverted list
     const typingId = `typing-${Date.now()}`;
     setMessages((prev) => [
-      ...prev,
       { id: typingId, text: "", isUser: false, isTyping: true },
+      userMsg,
+      ...prev,
     ]);
 
     try {
@@ -246,8 +295,8 @@ export default function ThomoChatScreen() {
       setMessages((prev) => {
         const withoutTyping = prev.filter((m) => m.id !== typingId);
         return [
-          ...withoutTyping,
           { id: reply.id, text: reply.content, isUser: false },
+          ...withoutTyping,
         ];
       });
 
@@ -261,12 +310,12 @@ export default function ThomoChatScreen() {
       setMessages((prev) => {
         const withoutTyping = prev.filter((m) => m.id !== typingId);
         return [
-          ...withoutTyping,
           {
             id: `error-${Date.now()}`,
             text: "Sorry, something went wrong. Please try again.",
             isUser: false,
           },
+          ...withoutTyping,
         ];
       });
     } finally {
@@ -281,7 +330,7 @@ export default function ThomoChatScreen() {
   };
 
   useEffect(() => {
-    scrollRef.current?.scrollToEnd({ animated: true });
+    // Scroll handling is now managed by FlatList's inverted property
   }, [messages]);
 
   const historyGroups = groupConversations(conversations);
@@ -301,67 +350,73 @@ export default function ThomoChatScreen() {
     <View className="flex-1 bg-white">
       <StatusBar style="dark" />
 
+      <Stack.Screen options={{ headerShown: false }} />
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
-        <View style={{ paddingTop: 70, paddingBottom: 16, paddingHorizontal: 20 }}>
-          <View className="flex-row items-center justify-center" style={{ position: "relative" }}>
+        <View style={{ paddingTop: 60, paddingBottom: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: "#F5F5F5" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", height: 44 }}>
             <Pressable
               onPress={handleBack}
               hitSlop={12}
-              style={{ position: "absolute", left: 0 }}
+              style={{ position: "absolute", left: 0, width: 40, height: 40, borderRadius: 20, backgroundColor: "#F9F9F9", alignItems: "center", justifyContent: "center" }}
             >
-              <ChevronLeftIcon size={24} color="#1A1A1A" strokeWidth={2.5} />
+              <ChevronLeftIcon size={20} color="#1A1A1A" strokeWidth={2.5} />
             </Pressable>
-            <TextWrapper weight="medium" style={{ fontSize: 17, color: "#1A1A1A" }}>
-              Thomo Chat
-            </TextWrapper>
+            <View style={{ alignItems: "center" }}>
+              <TextWrapper weight="bold" style={{ fontSize: 17, color: "#1A1A1A" }}>
+                Thomo AI
+              </TextWrapper>
+              <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#22C55E", marginRight: 4 }} />
+                <TextWrapper weight="medium" style={{ fontSize: 11, color: "#71717A" }}>
+                  Online
+                </TextWrapper>
+              </View>
+            </View>
             <Pressable
               onPress={openDrawer}
               hitSlop={12}
-              style={{ position: "absolute", right: 0 }}
+              style={{ position: "absolute", right: 0, width: 40, height: 40, borderRadius: 20, backgroundColor: "#F9F9F9", alignItems: "center", justifyContent: "center" }}
             >
-              <MenuIcon size={22} />
+              <MenuIcon size={20} />
             </Pressable>
           </View>
         </View>
 
         {/* Messages */}
-        <ScrollView
-          ref={scrollRef}
+        <FlatList
+          data={messages}
+          inverted
+          keyExtractor={(item) => item.id}
           className="flex-1"
           contentContainerStyle={{
             paddingHorizontal: 20,
-            paddingBottom: 16,
-            flexGrow: 1,
-            justifyContent: messages.length === 0 ? "center" : "flex-end",
+            paddingTop: 20,
+            paddingBottom: 20,
           }}
-          showsVerticalScrollIndicator={false}
-        >
-          {messages.length === 0 && (
-            <View className="items-center" style={{ paddingBottom: 60 }}>
+          ListEmptyComponent={() => (
+            <View className="items-center" style={{ paddingBottom: 60, transform: [{ scaleY: -1 }] }}>
               <Image
                 source={require("../assets/images/logo.png")}
                 style={{ width: 64, height: 64, borderRadius: 16 }}
               />
               <TextWrapper weight="medium" style={{ fontSize: 16, color: "#1A1A1A", marginTop: 12 }}>
-                Hey, I'm Thomo
+                Hey, I&apos;m Thomo
               </TextWrapper>
               <TextWrapper weight="regular" style={{ fontSize: 14, color: "#999", marginTop: 4, textAlign: "center" }}>
                 Your AI CFO. Ask me anything about your finances.
               </TextWrapper>
             </View>
           )}
-
-          {messages.map((msg) => (
+          renderItem={({ item: msg }) => (
             <View
-              key={msg.id}
               style={{
                 alignSelf: msg.isUser ? "flex-end" : "flex-start",
-                marginBottom: 12,
-                maxWidth: "80%",
+                marginBottom: 16,
+                maxWidth: "85%",
                 flexDirection: "row",
                 alignItems: "flex-end",
                 gap: 8,
@@ -370,8 +425,10 @@ export default function ThomoChatScreen() {
               {!msg.isUser && <ThomoAvatarIcon size={28} />}
               <View
                 style={{
-                  backgroundColor: msg.isUser ? "#F0F0F0" : "#1A1A1A",
+                  backgroundColor: msg.isUser ? "#F4F4F5" : "#1A1A1A",
                   borderRadius: 18,
+                  borderBottomRightRadius: msg.isUser ? 4 : 18,
+                  borderBottomLeftRadius: !msg.isUser ? 4 : 18,
                   paddingHorizontal: 16,
                   paddingVertical: 12,
                 }}
@@ -385,8 +442,8 @@ export default function ThomoChatScreen() {
                     weight="regular"
                     style={{
                       fontSize: 15,
-                      color: msg.isUser ? "#1A1A1A" : "#fff",
-                      lineHeight: 21,
+                      color: msg.isUser ? "#1A1A1A" : "#FFFFFF",
+                      lineHeight: 22,
                     }}
                   >
                     {msg.text}
@@ -394,8 +451,8 @@ export default function ThomoChatScreen() {
                 )}
               </View>
             </View>
-          ))}
-        </ScrollView>
+          )}
+        />
 
         {/* Input bar */}
         <View style={{ paddingHorizontal: 20, paddingBottom: 36, paddingTop: 12 }}>

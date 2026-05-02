@@ -140,6 +140,13 @@ export default function RootLayout() {
                   }}
                 />
                 <Stack.Screen
+                  name="thomo-invoice-chat"
+                  options={{
+                    headerShown: false,
+                    animation: "slide_from_right",
+                  }}
+                />
+                <Stack.Screen
                   name="invoice-created"
                   options={{ headerShown: false, animation: "fade" }}
                 />
