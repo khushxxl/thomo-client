@@ -261,6 +261,44 @@ export async function sendMessage(
   });
 }
 
+export type AiInsights = {
+  period?: "week" | "month";
+  date_label?: string;
+  range_label?: string;
+  spent_today: {
+    amount: number;
+    percentage_vs_average: number;
+  };
+  top_category: {
+    name: string;
+    amount: number;
+  };
+  potential_savings: {
+    amount: number;
+    note: string;
+  };
+  thomo_quote: string;
+  breakdown: {
+    category: string;
+    amount: number;
+  }[];
+  daily_intelligence: {
+    date: string;
+    spent: number;
+    percentage_vs_usual: number;
+    thomo_advice: string;
+    breakdown: {
+      category: string;
+      amount: number;
+    }[];
+  }[];
+  thomo_advice: string;
+};
+
+export async function fetchAiInsights(period: "week" | "month" = "week"): Promise<AiInsights> {
+  return apiJson<AiInsights>(`/ai/insights?period=${period}`);
+}
+
 export async function deleteConversation(
   conversationId: string,
 ): Promise<void> {

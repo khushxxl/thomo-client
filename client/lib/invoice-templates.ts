@@ -14,8 +14,8 @@ export type InvoiceTemplateOption = {
 export const INVOICE_TEMPLATE_OPTIONS: InvoiceTemplateOption[] = [
   {
     id: "branded",
-    name: "Standard Invoice",
-    subtitle: "A clean, high-fidelity template with optional branding, payment details, and signature.",
+    name: "Clean Invoice",
+    subtitle: "Simple, professional layout",
     accent: "#000000",
     surface: "#FFFFFF",
     highlight: "#F4F4F5",

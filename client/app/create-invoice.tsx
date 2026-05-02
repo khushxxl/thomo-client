@@ -17,10 +17,11 @@ import {
 } from "@/lib/invoice-draft";
 import { getErrorMessage } from "@/lib/api";
 import { validateInvoiceDraft } from "@/lib/invoice-validation";
+import { TemplateStep } from "@/components/invoice-builder/template-step";
 import { FormStep } from "@/components/invoice-builder/form-step";
 import { PreviewStep } from "@/components/invoice-builder/preview-step";
 
-type Step = "form" | "preview";
+type Step = "template" | "form" | "preview";
 
 function BackArrow({ size = 24 }: { size?: number }) {
   return (
@@ -81,7 +82,7 @@ export default function CreateInvoiceScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ id?: string; draft?: string; source?: string }>();
   const seeded = useMemo(() => parseDraftParam(params.draft), [params.draft]);
-  const [step, setStep] = useState<Step>("form");
+  const [step, setStep] = useState<Step>(params.id ? "form" : "template");
   const [draft, setDraft] = useState<InvoiceDraft>(() =>
     createEmptyInvoiceDraft(seeded ?? undefined),
   );
@@ -89,10 +90,15 @@ export default function CreateInvoiceScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showValidation, setShowValidation] = useState(false);
   const validation = useMemo(() => validateInvoiceDraft(draft), [draft]);
+  const stepNumber = step === "template" ? 1 : step === "form" ? 2 : 3;
 
   const handleBack = () => {
     if (step === "preview") {
       setStep("form");
+      return;
+    }
+    if (step === "form" && !params.id) {
+      setStep("template");
       return;
     }
     router.back();
@@ -172,6 +178,9 @@ export default function CreateInvoiceScreen() {
           >
             <BackArrow size={20} />
           </Pressable>
+          <TextWrapper weight="regular" style={{ fontSize: 16, color: "#A3A3A3" }}>
+            {stepNumber} of 3
+          </TextWrapper>
         </View>
       </View>
 
@@ -182,6 +191,14 @@ export default function CreateInvoiceScreen() {
             {error}
           </TextWrapper>
         </View>
+      ) : null}
+
+      {step === "template" ? (
+        <TemplateStep
+          selectedTemplate={draft.template}
+          onSelect={(template) => setDraft({ ...draft, template })}
+          onNext={() => setStep("form")}
+        />
       ) : null}
 
       {step === "form" ? (

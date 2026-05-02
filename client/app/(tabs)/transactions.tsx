@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState, useCallback } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import {
   View,
   SectionList,
@@ -261,7 +261,9 @@ function InsightButtons() {
       style={{ gap: 10, paddingTop: 12, paddingBottom: 4 }}
     >
       <Pressable3D
-        onPress={() => router.push("/thomo-chat")}
+        onPress={() =>
+          router.push({ pathname: "/ai-insights", params: { period: "week" } })
+        }
         shadowColor="#000"
         style={{
           flex: 1,
@@ -276,9 +278,10 @@ function InsightButtons() {
           Weekly AI insights
         </TextWrapper>
       </Pressable3D>
-
       <Pressable3D
-        onPress={() => router.push("/thomo-chat")}
+        onPress={() =>
+          router.push({ pathname: "/ai-insights", params: { period: "month" } })
+        }
         shadowColor="#000"
         style={{
           flex: 1,

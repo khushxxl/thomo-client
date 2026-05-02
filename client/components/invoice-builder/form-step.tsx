@@ -11,6 +11,7 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth-context";
 import { getErrorMessage } from "@/lib/api";
@@ -140,20 +141,21 @@ export function FormStep({
 
   const handlePickLogo = async () => {
     setUploadError(null);
-    try {
-      const ImagePicker = await import("expo-image-picker").catch(() => {
-        throw new Error(
-          "Logo upload needs a rebuilt iOS app with expo-image-picker included. Run the iOS build once, then try again.",
-        );
-      });
+    
+    // Check if native module is available
+    if (!ImagePicker.requestMediaLibraryPermissionsAsync) {
+      setUploadError("Image picker is not linked. Please rebuild your dev client (npx expo run:ios/android).");
+      return;
+    }
 
+    try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         throw new Error("Photo access is required to upload a logo.");
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
