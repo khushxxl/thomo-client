@@ -1,5 +1,6 @@
 import { View } from "react-native";
 import type { InvoiceTemplateId } from "@/lib/invoice-draft";
+import { INVOICE_RADIUS } from "@/lib/invoice-ui";
 
 function StubLine({
   width,
@@ -15,7 +16,7 @@ function StubLine({
       style={{
         width,
         height,
-        borderRadius: 999,
+        borderRadius: INVOICE_RADIUS.chip,
         backgroundColor: dark ? "#171717" : "#E6E6E6",
       }}
     />

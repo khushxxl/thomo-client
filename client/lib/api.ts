@@ -295,8 +295,13 @@ export type AiInsights = {
   thomo_advice: string;
 };
 
-export async function fetchAiInsights(period: "week" | "month" = "week"): Promise<AiInsights> {
-  return apiJson<AiInsights>(`/ai/insights?period=${period}`);
+export async function fetchAiInsights(
+  period: "week" | "month" = "week",
+  refresh = false,
+): Promise<AiInsights> {
+  return apiJson<AiInsights>(
+    `/ai/insights?period=${period}${refresh ? "&refresh=1" : ""}`,
+  );
 }
 
 export async function deleteConversation(

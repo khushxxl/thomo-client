@@ -1,6 +1,8 @@
 import { supabase } from "@/lib/supabase";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { decode } from "base64-arraybuffer";
+
+const INVOICE_ASSETS_BUCKET = "invoice-assets";
 
 const IMAGE_CONTENT_TYPES: Record<string, string> = {
   jpg: "image/jpeg",
@@ -31,7 +33,7 @@ export async function uploadInvoiceAsset(
   });
 
   const { error } = await supabase.storage
-    .from("invoice-assets")
+    .from(INVOICE_ASSETS_BUCKET)
     .upload(path, decode(base64), {
       cacheControl: "31536000",
       contentType,
@@ -39,11 +41,16 @@ export async function uploadInvoiceAsset(
     });
 
   if (error) {
+    if (error.message.toLowerCase().includes("bucket not found")) {
+      throw new Error(
+        `Supabase Storage bucket "${INVOICE_ASSETS_BUCKET}" is missing. Create it as a public bucket before uploading logos.`,
+      );
+    }
     throw error;
   }
 
   const { data: publicUrlData } = supabase.storage
-    .from("invoice-assets")
+    .from(INVOICE_ASSETS_BUCKET)
     .getPublicUrl(path);
 
   return publicUrlData.publicUrl;

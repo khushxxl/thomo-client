@@ -45,6 +45,19 @@ export function TrashIcon({ size = 16, color = "#8A8A8F" }: { size?: number; col
   );
 }
 
+export function XIcon({ size = 16, color = "#171717" }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <Path
+        d="M5.5 5.5L14.5 14.5M14.5 5.5L5.5 14.5"
+        stroke={color}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
 export function Field({
   label,
   value,
@@ -108,21 +121,28 @@ export function Field({
             borderRadius: INVOICE_RADIUS.control,
             paddingHorizontal: 16,
             paddingVertical: multiline ? 14 : 0,
-            paddingRight: suffix ? 96 : 16,
+            paddingRight: suffix ? 64 : 16,
             fontSize: 16,
             color: editable ? "#171717" : "#666B74",
             fontFamily: "NeueMontreal-Regular",
           }}
         />
+        {suffix ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              right: 16,
+              top: 0,
+              bottom: 0,
+              justifyContent: multiline ? "flex-start" : "center",
+              paddingTop: multiline ? 16 : 0,
+            }}
+          >
+            {suffix}
+          </View>
+        ) : null}
       </View>
-      {suffix ? (
-        <View
-          pointerEvents="none"
-          style={{ position: "absolute", right: 16, bottom: multiline ? 16 : 17 }}
-        >
-          {suffix}
-        </View>
-      ) : null}
       {error ? (
         <TextWrapper
           weight="regular"

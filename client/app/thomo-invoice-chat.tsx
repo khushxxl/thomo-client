@@ -318,50 +318,40 @@ function ActionButton({
   );
 }
 
+import { ThomoAiBubble } from "@/components/thomo-ai/chat-bubble";
+
 function MessageRow({ message }: { message: Message }) {
+  if (message.role === "assistant") {
+    return (
+      <ThomoAiBubble
+        text={message.text}
+        loadingText={message.typing ? "Creating invoice for..." : undefined}
+      />
+    );
+  }
+
   return (
     <Animated.View
       entering={FadeInDown.duration(220)}
       layout={LinearTransition.duration(220)}
       style={{
-        alignSelf: message.role === "user" ? "flex-end" : "flex-start",
-        flexDirection: "row",
-        alignItems: "flex-end",
-        gap: 8,
+        alignSelf: "flex-end",
         marginBottom: 16,
-        maxWidth: "86%",
+        maxWidth: "80%",
       }}
     >
-      {message.role === "assistant" ? <ThomoAvatar size={28} /> : null}
       <View
         style={{
-          backgroundColor: message.role === "user" ? "#F4F4F5" : "#171717",
-          borderRadius: INVOICE_RADIUS.surface,
-          borderBottomRightRadius: message.role === "user" ? 6 : INVOICE_RADIUS.surface,
-          borderBottomLeftRadius: message.role === "assistant" ? 6 : INVOICE_RADIUS.surface,
+          backgroundColor: "#F4F4F5",
+          borderRadius: 18,
+          borderBottomRightRadius: 4,
           paddingHorizontal: 16,
           paddingVertical: 12,
-          shadowColor: "#000000",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: message.role === "assistant" ? 0.06 : 0.03,
-          shadowRadius: 8,
-          elevation: 1,
         }}
       >
-        {message.typing ? (
-          <TypingBubble />
-        ) : (
-          <TextWrapper
-            weight="regular"
-            style={{
-              fontSize: 15,
-              lineHeight: 22,
-              color: message.role === "user" ? "#171717" : "#FFFFFF",
-            }}
-          >
-            {message.text}
-          </TextWrapper>
-        )}
+        <TextWrapper weight="regular" style={{ fontSize: 15, color: "#171717", lineHeight: 22 }}>
+          {message.text}
+        </TextWrapper>
       </View>
     </Animated.View>
   );

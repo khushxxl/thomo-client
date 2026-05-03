@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -11,7 +12,6 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import { Image } from "expo-image";
-import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth-context";
 import { getErrorMessage } from "@/lib/api";
@@ -36,6 +36,7 @@ import {
   SectionTitle,
   SummaryRow,
   TrashIcon,
+  XIcon,
 } from "@/components/invoice-builder/shared";
 
 type DateFieldKey = "issue_date" | "due_date" | null;
@@ -58,6 +59,7 @@ type Props = {
   validationMessage: string | null;
   fieldErrors: InvoiceFieldErrorMap;
   showValidation: boolean;
+  canPreview: boolean;
 };
 
 function SectionCard({
@@ -90,6 +92,29 @@ function Row({ children }: { children: ReactNode }) {
   return <View style={{ flexDirection: "row", gap: 12 }}>{children}</View>;
 }
 
+function CurrencyBadge() {
+  return (
+    <View
+      style={{
+        minHeight: 52,
+        borderRadius: INVOICE_RADIUS.control,
+        backgroundColor: "#F8F8F6",
+        borderWidth: 1,
+        borderColor: "#E7E5DF",
+        paddingHorizontal: 14,
+        justifyContent: "center",
+      }}
+    >
+      <TextWrapper weight="medium" style={{ fontSize: 16, color: "#171717" }}>
+        GBP
+      </TextWrapper>
+      <TextWrapper weight="regular" style={{ fontSize: 11, color: "#8A8A8F", marginTop: 2 }}>
+        British pound sterling
+      </TextWrapper>
+    </View>
+  );
+}
+
 export function FormStep({
   draft,
   setDraft,
@@ -100,6 +125,7 @@ export function FormStep({
   validationMessage,
   fieldErrors,
   showValidation,
+  canPreview,
 }: Props) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -109,6 +135,7 @@ export function FormStep({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const visibleLineErrors = useMemo(() => fieldErrors.line_items || {}, [fieldErrors.line_items]);
+  const previewReady = canPreview && !uploading;
 
   const openDateField = (field: Exclude<DateFieldKey, null>) => {
     const raw = field === "issue_date" ? draft.issue_date : draft.due_date;
@@ -140,15 +167,11 @@ export function FormStep({
   };
 
   const handlePickLogo = async () => {
+    if (uploading) return;
     setUploadError(null);
-    
-    // Check if native module is available
-    if (!ImagePicker.requestMediaLibraryPermissionsAsync) {
-      setUploadError("Image picker is not linked. Please rebuild your dev client (npx expo run:ios/android).");
-      return;
-    }
 
     try {
+      const ImagePicker = await import("expo-image-picker");
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         throw new Error("Photo access is required to upload a logo.");
@@ -168,7 +191,12 @@ export function FormStep({
       }
     } catch (err) {
       console.error("Logo upload failed:", err);
-      setUploadError(getErrorMessage(err, "Could not upload this logo."));
+      const message = getErrorMessage(err, "Could not upload this logo.");
+      setUploadError(
+        message.includes("ExponentImagePicker") || message.includes("expo-image-picker")
+          ? "Image picker is not linked in this dev client. Rebuild the iOS app, then try uploading again."
+          : message,
+      );
     } finally {
       setUploading(false);
     }
@@ -206,19 +234,26 @@ export function FormStep({
               />
             </View>
             <View style={{ flex: 1 }}>
-              <Field
-                label="Currency"
-                value="GBP"
-                onChangeText={() => undefined}
-                placeholder="GBP"
-                editable={false}
-                suffix={
-                  <TextWrapper weight="medium" style={{ fontSize: 12, color: "#8A8A8F" }}>
-                    Sterling
-                  </TextWrapper>
-                }
-                helper="Invoices are issued in pounds."
-              />
+              <View style={{ marginBottom: 16 }}>
+                <TextWrapper
+                  weight="medium"
+                  style={{
+                    fontSize: 12,
+                    color: "#7B7B81",
+                    marginBottom: 8,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Currency
+                </TextWrapper>
+                <CurrencyBadge />
+                <TextWrapper
+                  weight="regular"
+                  style={{ fontSize: 12, color: "#8A8A8F", marginTop: 6 }}
+                >
+                  Invoices are issued in pounds.
+                </TextWrapper>
+              </View>
             </View>
           </Row>
 
@@ -282,39 +317,97 @@ export function FormStep({
             >
               Business Logo
             </TextWrapper>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                backgroundColor: "#FAFAFA",
+                borderWidth: 1,
+                borderColor: uploading ? "#171717" : "#ECECEC",
+                borderRadius: INVOICE_RADIUS.control,
+                padding: 10,
+                opacity: uploading ? 0.78 : 1,
+              }}
+            >
               <Pressable
                 onPress={handlePickLogo}
                 disabled={uploading}
                 style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: 12,
-                  backgroundColor: "#FAFAFA",
-                  borderWidth: 1,
-                  borderColor: "#ECECEC",
+                  flexDirection: "row",
                   alignItems: "center",
-                  justifyContent: "center",
-                  overflow: "hidden",
+                  gap: 12,
+                  flex: 1,
                 }}
               >
-                {draft.brand_logo_url ? (
-                  <Image
-                    source={{ uri: draft.brand_logo_url }}
-                    style={{ width: "100%", height: "100%" }}
-                    contentFit="contain"
-                  />
-                ) : (
-                  <View style={{ alignItems: "center" }}>
-                    <PlusIcon size={20} color="#8A8A8F" />
-                    <TextWrapper
-                      weight="medium"
-                      style={{ fontSize: 11, color: "#8A8A8F", marginTop: 4 }}
+                <View
+                  style={{
+                    width: 78,
+                    height: 78,
+                    borderRadius: INVOICE_RADIUS.control,
+                    backgroundColor: "#FFFFFF",
+                    borderWidth: 1,
+                    borderColor: "#E5E5E5",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    overflow: "hidden",
+                  }}
+                >
+                  {draft.brand_logo_url ? (
+                    <Image
+                      source={{ uri: draft.brand_logo_url }}
+                      style={{ width: "100%", height: "100%" }}
+                      contentFit="contain"
+                    />
+                  ) : uploading ? (
+                    <ActivityIndicator color="#171717" />
+                  ) : (
+                    <View style={{ alignItems: "center" }}>
+                      <PlusIcon size={20} color="#8A8A8F" />
+                      <TextWrapper
+                        weight="medium"
+                        style={{ fontSize: 11, color: "#8A8A8F", marginTop: 4 }}
+                      >
+                        Upload
+                      </TextWrapper>
+                    </View>
+                  )}
+                  {uploading ? (
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                        left: 0,
+                        backgroundColor: "rgba(255,255,255,0.78)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
                     >
-                      {uploading ? "..." : "Upload"}
-                    </TextWrapper>
-                  </View>
-                )}
+                      <ActivityIndicator color="#171717" />
+                    </View>
+                  ) : null}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <TextWrapper weight="medium" style={{ fontSize: 14, color: "#171717" }}>
+                    {uploading
+                      ? "Uploading logo..."
+                      : draft.brand_logo_url
+                        ? "Logo uploaded"
+                        : "Select a professional logo"}
+                  </TextWrapper>
+                  <TextWrapper
+                    weight="regular"
+                    style={{ fontSize: 12, color: "#8A8A8F", lineHeight: 17, marginTop: 3 }}
+                  >
+                    {uploading
+                      ? "Please wait while we save it to your invoice assets."
+                      : draft.brand_logo_url
+                        ? "Tap here to replace it."
+                        : "Tap to choose an image from Photos."}
+                  </TextWrapper>
+                </View>
               </Pressable>
               {draft.brand_logo_url ? (
                 <Pressable
@@ -322,22 +415,23 @@ export function FormStep({
                     setUploadError(null);
                     setDraft({ ...draft, brand_logo_url: "" });
                   }}
+                  disabled={uploading}
+                  hitSlop={10}
                   style={{
-                    backgroundColor: "#F3F4F6",
-                    paddingHorizontal: 12,
-                    paddingVertical: 6,
-                    borderRadius: 8,
+                    width: 34,
+                    height: 34,
+                    borderRadius: INVOICE_RADIUS.action,
+                    backgroundColor: "#FFFFFF",
+                    borderWidth: 1,
+                    borderColor: "#E5E5E5",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    opacity: uploading ? 0.55 : 1,
                   }}
                 >
-                  <TextWrapper weight="medium" style={{ fontSize: 12, color: "#EF4444" }}>
-                    Remove
-                  </TextWrapper>
+                  <XIcon size={15} color="#737373" />
                 </Pressable>
-              ) : (
-                <TextWrapper weight="regular" style={{ fontSize: 12, color: "#8A8A8F", flex: 1 }}>
-                  Select a professional logo for your invoice.
-                </TextWrapper>
-              )}
+              ) : null}
             </View>
             {uploadError ? (
               <TextWrapper
@@ -548,7 +642,7 @@ export function FormStep({
                     style={{
                       width: 32,
                       height: 32,
-                      borderRadius: INVOICE_RADIUS.control,
+                      borderRadius: INVOICE_RADIUS.action,
                       alignItems: "center",
                       justifyContent: "center",
                     }}
@@ -625,7 +719,7 @@ export function FormStep({
             }
             style={{
               alignSelf: "flex-start",
-              borderRadius: INVOICE_RADIUS.control,
+              borderRadius: INVOICE_RADIUS.action,
               backgroundColor: "#FFFFFF",
               borderWidth: 1,
               borderColor: "#ECECEC",
@@ -736,7 +830,7 @@ export function FormStep({
             }
             style={{
               alignSelf: "flex-start",
-              borderRadius: INVOICE_RADIUS.control,
+              borderRadius: INVOICE_RADIUS.action,
               backgroundColor: "#FFFFFF",
               borderWidth: 1,
               borderColor: "#ECECEC",
@@ -796,17 +890,32 @@ export function FormStep({
         >
           <Pressable
             onPress={onNext}
+            disabled={!previewReady}
             style={{
-              backgroundColor: "#171717",
-              borderRadius: INVOICE_RADIUS.control,
+              backgroundColor: previewReady ? "#171717" : "#D8D8D3",
+              borderRadius: INVOICE_RADIUS.action,
               paddingVertical: 18,
               alignItems: "center",
+              opacity: previewReady ? 1 : 0.9,
             }}
           >
-            <TextWrapper weight="medium" style={{ fontSize: 16, color: "#FFFFFF" }}>
-              Preview invoice
+            <TextWrapper
+              weight="medium"
+              style={{ fontSize: 16, color: previewReady ? "#FFFFFF" : "#777771" }}
+            >
+              {uploading ? "Uploading logo..." : "Preview invoice"}
             </TextWrapper>
           </Pressable>
+          {!previewReady ? (
+            <TextWrapper
+              weight="regular"
+              style={{ fontSize: 12, color: "#8A8A8F", textAlign: "center", marginTop: 8 }}
+            >
+              {uploading
+                ? "Please wait until the logo upload finishes."
+                : "Complete the required details to preview."}
+            </TextWrapper>
+          ) : null}
         </View>
       </KeyboardAvoidingView>
 
@@ -850,7 +959,7 @@ export function FormStep({
                   <Pressable
                     onPress={() => setActiveDateField(null)}
                     style={{
-                      borderRadius: INVOICE_RADIUS.control,
+                      borderRadius: INVOICE_RADIUS.action,
                       backgroundColor: "#F3F4F6",
                       paddingHorizontal: 12,
                       paddingVertical: 8,
@@ -868,7 +977,7 @@ export function FormStep({
                       setActiveDateField(null);
                     }}
                     style={{
-                      borderRadius: INVOICE_RADIUS.control,
+                      borderRadius: INVOICE_RADIUS.action,
                       backgroundColor: "#171717",
                       paddingHorizontal: 12,
                       paddingVertical: 8,

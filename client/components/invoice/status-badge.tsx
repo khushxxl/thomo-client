@@ -11,9 +11,9 @@ export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
     <View
       style={{
         backgroundColor: theme.bg,
-        borderRadius: INVOICE_RADIUS.chip,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
+        borderRadius: 52, // Matched to Figma radius
+        paddingHorizontal: 12, // Matched to Figma padding
+        paddingVertical: 6, // Matched to Figma padding
       }}
     >
       <TextWrapper weight="medium" style={{ fontSize: 12, color: theme.text }}>

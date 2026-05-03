@@ -1,9 +1,10 @@
 import type { InvoiceStatus } from "@/lib/invoices";
 
 export const INVOICE_RADIUS = {
-  surface: 18,
-  control: 18,
-  chip: 999,
+  surface: 16,
+  control: 16, // Matched to Figma button radius
+  action: 16,
+  chip: 8,
 } as const;
 
 export const INVOICE_STATUS_THEME: Record<
@@ -27,8 +28,8 @@ export const INVOICE_STATUS_THEME: Record<
     bg: "hsl(10 100% 97%)",
   },
   paid: {
-    text: "hsl(157 70% 35%)",
-    bg: "hsl(153 75% 95%)",
+    text: "#00A281",
+    bg: "rgba(0, 162, 129, 0.1)",
   },
   cancelled: {
     text: "hsl(220 9% 46%)",

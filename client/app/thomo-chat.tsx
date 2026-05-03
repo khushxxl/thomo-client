@@ -21,7 +21,6 @@ import * as Haptics from "expo-haptics";
 import Svg, { Circle, Line, Path } from "react-native-svg";
 import { TextWrapper } from "@/components/text-wrapper";
 import { ChevronLeftIcon } from "@/components/icons/chevron-left-icon";
-import { ThomoAvatarIcon } from "@/components/icons/thomo-avatar-icon";
 import {
   createConversation,
   deleteConversation,
@@ -30,6 +29,8 @@ import {
   sendMessage,
   type Conversation,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { readPersistentCache, writePersistentCache } from "@/lib/persistent-cache";
 
 const DUMMY_CONVERSATIONS: Conversation[] = [
   {
@@ -61,22 +62,67 @@ type HistoryGroup = {
   items: Conversation[];
 };
 
+type ChatSnapshot = {
+  conversations: Conversation[];
+  activeConversationId: string | null;
+  messages: Message[];
+  inputText: string;
+  messageCache: Record<string, Message[]>;
+  fetchedAt: number;
+};
+
+const CHAT_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 14;
+const CHAT_REFRESH_INTERVAL_MS = 1000 * 60;
+const chatMemory: Record<string, ChatSnapshot> = {};
+
+function chatCacheKey(userId: string | null): string {
+  return `thomo:chat:${userId ?? "guest"}:v1`;
+}
+
 function groupConversations(conversations: Conversation[]): HistoryGroup[] {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 86_400_000);
-  const groups: Record<string, Conversation[]> = {};
+  const last7Days = new Date(today.getTime() - 86_400_000 * 7);
+  const last30Days = new Date(today.getTime() - 86_400_000 * 30);
+
+  const groupsMap: Record<string, Conversation[]> = {
+    Today: [],
+    Yesterday: [],
+    "Previous 7 Days": [],
+    "Previous 30 Days": [],
+  };
+  
+  const monthlyGroups: Record<string, Conversation[]> = {};
 
   for (const conv of conversations) {
     const date = new Date(conv.updated_at);
-    let label = date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-    if (date >= today) label = "Today";
-    else if (date >= yesterday) label = "Yesterday";
-
-    groups[label] = [...(groups[label] ?? []), conv];
+    if (date >= today) {
+      groupsMap["Today"].push(conv);
+    } else if (date >= yesterday) {
+      groupsMap["Yesterday"].push(conv);
+    } else if (date >= last7Days) {
+      groupsMap["Previous 7 Days"].push(conv);
+    } else if (date >= last30Days) {
+      groupsMap["Previous 30 Days"].push(conv);
+    } else {
+      const monthLabel = date.toLocaleDateString("en-GB", { month: "long" });
+      if (!monthlyGroups[monthLabel]) monthlyGroups[monthLabel] = [];
+      monthlyGroups[monthLabel].push(conv);
+    }
   }
 
-  return Object.entries(groups).map(([label, items]) => ({ label, items }));
+  const result: HistoryGroup[] = [];
+  if (groupsMap["Today"].length > 0) result.push({ label: "Today", items: groupsMap["Today"] });
+  if (groupsMap["Yesterday"].length > 0) result.push({ label: "Yesterday", items: groupsMap["Yesterday"] });
+  if (groupsMap["Previous 7 Days"].length > 0) result.push({ label: "Previous 7 Days", items: groupsMap["Previous 7 Days"] });
+  if (groupsMap["Previous 30 Days"].length > 0) result.push({ label: "Previous 30 Days", items: groupsMap["Previous 30 Days"] });
+  
+  Object.entries(monthlyGroups).forEach(([label, items]) => {
+    result.push({ label, items });
+  });
+
+  return result;
 }
 
 function MenuIcon({ size = 24, color = "#171717" }: { size?: number; color?: string }) {
@@ -220,47 +266,39 @@ const TypingDots = memo(function TypingDots() {
   );
 });
 
+import { ThomoAiBubble } from "@/components/thomo-ai/chat-bubble";
+
 const ChatMessageBubble = memo(function ChatMessageBubble({ msg }: { msg: Message }) {
-  return (
-    <View
-      style={{
-        alignSelf: msg.isUser ? "flex-end" : "flex-start",
-        marginBottom: 16,
-        maxWidth: "85%",
-        flexDirection: "row",
-        alignItems: "flex-end",
-        gap: 8,
-      }}
-    >
-      {!msg.isUser && <ThomoAvatarIcon size={28} />}
+  if (msg.isUser) {
+    return (
       <View
         style={{
-          backgroundColor: msg.isUser ? "#F4F4F5" : "#1A1A1A",
-          borderRadius: 18,
-          borderBottomRightRadius: msg.isUser ? 4 : 18,
-          borderBottomLeftRadius: !msg.isUser ? 4 : 18,
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          minHeight: 44,
-          justifyContent: "center",
+          alignSelf: "flex-end",
+          marginBottom: 16,
+          maxWidth: "80%",
         }}
       >
-        {msg.isTyping ? (
-          <TypingDots />
-        ) : (
-          <TextWrapper
-            weight="regular"
-            style={{
-              fontSize: 15,
-              color: msg.isUser ? "#1A1A1A" : "#FFFFFF",
-              lineHeight: 22,
-            }}
-          >
+        <View
+          style={{
+            backgroundColor: "#F4F4F5",
+            borderRadius: 18,
+            borderBottomRightRadius: 4,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+          }}
+        >
+          <TextWrapper weight="regular" style={{ fontSize: 15, color: "#1A1A1A", lineHeight: 22 }}>
             {msg.text}
           </TextWrapper>
-        )}
+        </View>
       </View>
-    </View>
+    );
+  }
+
+  return (
+    <ThomoAiBubble
+      text={msg.text}
+    />
   );
 });
 
@@ -315,6 +353,9 @@ const HistoryRow = memo(function HistoryRow({
 
 export default function ThomoChatScreen() {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const cacheKey = chatCacheKey(userId);
   const { width: screenWidth } = useWindowDimensions();
   const sidebarWidth = screenWidth * 0.82;
   const [inputText, setInputText] = useState("");
@@ -324,18 +365,102 @@ export default function ThomoChatScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [chatHydrated, setChatHydrated] = useState(Boolean(chatMemory[cacheKey]));
+  const [messageCache, setMessageCache] = useState<Record<string, Message[]>>(
+    chatMemory[cacheKey]?.messageCache ?? {},
+  );
   const listRef = useRef<FlatList<Message>>(null);
   const sidebarTranslateX = useRef(new RNAnimated.Value(sidebarWidth)).current;
   const overlayOpacity = useRef(new RNAnimated.Value(0)).current;
 
   useEffect(() => {
+    let mounted = true;
+    const memory = chatMemory[cacheKey];
+
+    if (memory) {
+      setConversations(memory.conversations);
+      setActiveConversationId(memory.activeConversationId);
+      setMessages(memory.messages);
+      setInputText(memory.inputText);
+      setMessageCache(memory.messageCache);
+      setChatHydrated(true);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setChatHydrated(false);
+    readPersistentCache<ChatSnapshot>(cacheKey, CHAT_CACHE_TTL_MS).then((snapshot) => {
+      if (!mounted) return;
+      if (snapshot) {
+        chatMemory[cacheKey] = snapshot;
+        setConversations(snapshot.conversations);
+        setActiveConversationId(snapshot.activeConversationId);
+        setMessages(snapshot.messages);
+        setInputText(snapshot.inputText);
+        setMessageCache(snapshot.messageCache ?? {});
+      }
+      setChatHydrated(true);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [cacheKey]);
+
+  useEffect(() => {
+    if (!chatHydrated) return;
+
+    const memory = chatMemory[cacheKey];
+    if (memory && Date.now() - memory.fetchedAt < CHAT_REFRESH_INTERVAL_MS) {
+      return;
+    }
+
     fetchConversations()
-      .then((data) => setConversations(data))
+      .then((data) => {
+        setConversations(data);
+        chatMemory[cacheKey] = {
+          conversations: data,
+          activeConversationId,
+          messages,
+          inputText,
+          messageCache,
+          fetchedAt: Date.now(),
+        };
+      })
       .catch((err) => {
         console.error("Failed to load conversations:", err);
-        setConversations(DUMMY_CONVERSATIONS);
+        if (conversations.length === 0) setConversations(DUMMY_CONVERSATIONS);
       });
-  }, []);
+  }, [
+    activeConversationId,
+    cacheKey,
+    chatHydrated,
+    conversations.length,
+    inputText,
+    messageCache,
+    messages,
+  ]);
+
+  useEffect(() => {
+    if (!chatHydrated) return;
+
+    const snapshot: ChatSnapshot = {
+      conversations,
+      activeConversationId,
+      messages: messages.filter((message) => !message.isTyping),
+      inputText,
+      messageCache,
+      fetchedAt: chatMemory[cacheKey]?.fetchedAt ?? 0,
+    };
+    chatMemory[cacheKey] = snapshot;
+
+    const timeout = setTimeout(() => {
+      writePersistentCache(cacheKey, snapshot);
+    }, 250);
+
+    return () => clearTimeout(timeout);
+  }, [activeConversationId, cacheKey, chatHydrated, conversations, inputText, messageCache, messages]);
 
   useEffect(() => {
     if (!sidebarMounted) {
@@ -405,15 +530,21 @@ export default function ThomoChatScreen() {
 
   const loadConversation = useCallback(async (convId: string) => {
     setActiveConversationId(convId);
+    const cachedMessages = messageCache[convId];
+    if (cachedMessages?.length) {
+      setMessages(cachedMessages);
+      return;
+    }
+
     try {
       const msgs = await fetchMessages(convId);
-      setMessages(
-        msgs.map((message) => ({
-          id: message.id,
-          text: message.content,
-          isUser: message.role === "user",
-        })),
-      );
+      const nextMessages = msgs.map((message) => ({
+        id: message.id,
+        text: message.content,
+        isUser: message.role === "user",
+      }));
+      setMessages(nextMessages);
+      setMessageCache((current) => ({ ...current, [convId]: nextMessages }));
     } catch (err) {
       console.error("Failed to load messages:", err);
       setMessages([
@@ -422,7 +553,7 @@ export default function ThomoChatScreen() {
         { id: "m3", text: "What's on your mind today?", isUser: false },
       ]);
     }
-  }, []);
+  }, [messageCache]);
 
   const startNewChat = useCallback(() => {
     setActiveConversationId(null);
@@ -463,17 +594,35 @@ export default function ThomoChatScreen() {
         const conv = await createConversation();
         convId = conv.id;
         setActiveConversationId(convId);
+        setConversations((current) => [conv, ...current]);
       }
 
       const reply = await sendMessage(convId, text);
-      setMessages((prev) =>
-        prev.map((message) =>
+      setMessages((prev) => {
+        const nextMessages = prev.map((message) =>
           message.id === typingId
             ? { id: reply.id, text: reply.content, isUser: false }
             : message,
-        ),
-      );
-      fetchConversations().then(setConversations).catch(() => {});
+        );
+        setMessageCache((current) => ({
+          ...current,
+          [convId as string]: nextMessages.filter((message) => !message.isTyping),
+        }));
+        return nextMessages;
+      });
+      fetchConversations()
+        .then((data) => {
+          setConversations(data);
+          chatMemory[cacheKey] = {
+            conversations: data,
+            activeConversationId: convId,
+            messages: chatMemory[cacheKey]?.messages ?? [],
+            inputText: "",
+            messageCache,
+            fetchedAt: Date.now(),
+          };
+        })
+        .catch(() => {});
     } catch (err) {
       console.error("Send failed:", err);
       setMessages((prev) =>
@@ -713,75 +862,29 @@ export default function ThomoChatScreen() {
               right: 0,
               bottom: 0,
               width: sidebarWidth,
-              backgroundColor: "#F8F8F6",
-              paddingTop: insets.top,
+              backgroundColor: "#FFFFFF",
+              paddingTop: insets.top + 20,
               transform: [{ translateX: sidebarTranslateX }],
-              shadowColor: "#171717",
-              shadowOffset: { width: -2, height: 0 },
-              shadowOpacity: 0.1,
+              shadowColor: "#000",
+              shadowOffset: { width: -4, height: 0 },
+              shadowOpacity: 0.05,
               shadowRadius: 20,
               elevation: 10,
             }}
           >
-            <View
-              style={{
-                paddingHorizontal: 24,
-                paddingTop: Platform.OS === "ios" ? 20 : 40,
-                paddingBottom: 20,
-                borderBottomWidth: 1,
-                borderBottomColor: "#E8E8E8",
-                marginBottom: 10,
-              }}
-            >
-              <Image
-                source={require("../assets/images/logo.png")}
-                style={{ width: 42, height: 42, borderRadius: 12 }}
-                contentFit="contain"
-                cachePolicy="memory-disk"
-              />
-              <TextWrapper weight="bold" style={{ fontSize: 22, color: "#171717", marginTop: 14 }}>
-                Thomo AI
-              </TextWrapper>
-            </View>
-
-            <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
-              <Pressable
-                onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-                style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, paddingHorizontal: 16 }}
-              >
-                <MessageIcon />
-                <TextWrapper weight="regular" style={{ fontSize: 17, color: "#171717", lineHeight: 24 }}>
-                  Chats
-                </TextWrapper>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  startNewChat();
-                  toggleSidebar(false);
-                }}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 12,
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                }}
-              >
-                <NewChatIcon />
-                <TextWrapper weight="regular" style={{ fontSize: 17, color: "#171717", lineHeight: 24 }}>
-                  New chat
-                </TextWrapper>
-              </Pressable>
+            <View style={{ paddingHorizontal: 20, marginBottom: 20 }}>
               <View
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
                   gap: 12,
-                  paddingVertical: 12,
+                  backgroundColor: "#F5F5F5",
+                  borderRadius: 12,
                   paddingHorizontal: 16,
+                  paddingVertical: 10,
                 }}
               >
-                <SearchIcon />
+                <SearchIcon color="#8C8C8C" size={18} />
                 <TextInput
                   value={searchText}
                   onChangeText={setSearchText}
@@ -789,7 +892,7 @@ export default function ThomoChatScreen() {
                   placeholderTextColor="#8C8C8C"
                   style={{
                     flex: 1,
-                    fontSize: 17,
+                    fontSize: 16,
                     color: "#171717",
                     fontFamily: "NeueMontreal-Regular",
                     paddingVertical: 0,
@@ -801,22 +904,14 @@ export default function ThomoChatScreen() {
             <FlatList
               data={filteredHistory}
               keyExtractor={(item) => item.label}
-              contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: Math.max(insets.bottom, 24) }}
+              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 24) }}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              ListHeaderComponent={
-                <TextWrapper
-                  weight="regular"
-                  style={{ fontSize: 14, color: "#9A9A9A", marginBottom: 8, lineHeight: 20 }}
-                >
-                  Recents
-                </TextWrapper>
-              }
               renderItem={({ item: group }) => (
-                <View>
+                <View style={{ marginBottom: 24 }}>
                   <TextWrapper
-                    weight="regular"
-                    style={{ fontSize: 12, color: "#B2B2B2", marginTop: 10, marginBottom: 4 }}
+                    weight="medium"
+                    style={{ fontSize: 13, color: "#9A9A9A", marginBottom: 8 }}
                   >
                     {group.label}
                   </TextWrapper>

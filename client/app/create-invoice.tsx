@@ -17,6 +17,7 @@ import {
 } from "@/lib/invoice-draft";
 import { getErrorMessage } from "@/lib/api";
 import { validateInvoiceDraft } from "@/lib/invoice-validation";
+import { INVOICE_RADIUS } from "@/lib/invoice-ui";
 import { TemplateStep } from "@/components/invoice-builder/template-step";
 import { FormStep } from "@/components/invoice-builder/form-step";
 import { PreviewStep } from "@/components/invoice-builder/preview-step";
@@ -168,7 +169,7 @@ export default function CreateInvoiceScreen() {
             style={{
               width: 40,
               height: 40,
-              borderRadius: 20,
+              borderRadius: INVOICE_RADIUS.action,
               backgroundColor: "#FFFFFF",
               alignItems: "center",
               justifyContent: "center",
@@ -212,6 +213,7 @@ export default function CreateInvoiceScreen() {
           validationMessage={validation.message}
           fieldErrors={validation.fields}
           showValidation={showValidation}
+          canPreview={validation.isValid}
         />
       ) : null}
 

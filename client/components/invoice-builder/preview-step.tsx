@@ -1,4 +1,5 @@
-import { Platform, Pressable, ScrollView, View } from "react-native";
+import { useState } from "react";
+import { ActivityIndicator, Platform, Pressable, ScrollView, View } from "react-native";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import { TextWrapper } from "@/components/text-wrapper";
@@ -25,6 +26,7 @@ type Props = {
 };
 
 function BrandedInvoicePreview({ draft }: { draft: InvoiceDraft }) {
+  const [logoLoading, setLogoLoading] = useState(false);
   const styles = invoiceTemplatePreviewStyles("branded");
   const totals = calculateInvoiceTotals(draft);
   const signature = draft.signature_name.trim();
@@ -78,7 +80,7 @@ function BrandedInvoicePreview({ draft }: { draft: InvoiceDraft }) {
             style={{
               width: 88,
               height: 88,
-              borderRadius: 18,
+              borderRadius: INVOICE_RADIUS.surface,
               overflow: "hidden",
               marginBottom: 18,
             }}
@@ -87,14 +89,32 @@ function BrandedInvoicePreview({ draft }: { draft: InvoiceDraft }) {
               source={{ uri: draft.brand_logo_url }}
               style={{ width: "100%", height: "100%", backgroundColor: "#FFFFFF" }}
               contentFit="contain"
+              onLoadStart={() => setLogoLoading(true)}
+              onLoadEnd={() => setLogoLoading(false)}
             />
+            {logoLoading ? (
+              <View
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  right: 0,
+                  bottom: 0,
+                  left: 0,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "rgba(255,255,255,0.82)",
+                }}
+              >
+                <ActivityIndicator color={styles.headingColor} />
+              </View>
+            ) : null}
           </View>
         ) : brandMark ? (
           <View
             style={{
               width: 88,
               height: 88,
-              borderRadius: 18,
+              borderRadius: INVOICE_RADIUS.surface,
               backgroundColor: styles.accent,
               alignItems: "center",
               justifyContent: "center",
@@ -342,7 +362,7 @@ export function PreviewStep({ draft, onEdit, onCreate, saving }: Props) {
           style={{
             flex: 1,
             backgroundColor: "#FFFFFF",
-            borderRadius: INVOICE_RADIUS.control,
+            borderRadius: INVOICE_RADIUS.action,
             borderWidth: 1,
             borderColor: "#ECECEC",
             paddingVertical: 18,
@@ -362,7 +382,7 @@ export function PreviewStep({ draft, onEdit, onCreate, saving }: Props) {
           style={{
             flex: 1,
             backgroundColor: "#171717",
-            borderRadius: INVOICE_RADIUS.control,
+            borderRadius: INVOICE_RADIUS.action,
             paddingVertical: 18,
             alignItems: "center",
             opacity: saving ? 0.7 : 1,

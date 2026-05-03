@@ -5,6 +5,7 @@ import Svg, { Path } from "react-native-svg";
 import { TemplatePreviewCard } from "@/components/invoice-builder/template-preview-card";
 import { TextWrapper } from "@/components/text-wrapper";
 import type { InvoiceTemplateId } from "@/lib/invoice-draft";
+import { INVOICE_RADIUS } from "@/lib/invoice-ui";
 import { invoiceTemplateMeta } from "@/lib/invoice-templates";
 
 type Props = {
@@ -67,7 +68,7 @@ export function TemplateStep({ selectedTemplate, onSelect, onNext }: Props) {
               style={{
                 borderWidth: 1,
                 borderColor: "#E4E4E7",
-                borderRadius: 20,
+                borderRadius: INVOICE_RADIUS.surface,
                 backgroundColor: "#FFFFFF",
                 height: previewHeight,
                 overflow: "hidden",
@@ -137,7 +138,7 @@ export function TemplateStep({ selectedTemplate, onSelect, onNext }: Props) {
             <View
               style={{
                 backgroundColor: "#171717",
-                borderRadius: 18,
+                borderRadius: INVOICE_RADIUS.action,
                 paddingVertical: 18,
                 alignItems: "center",
                 opacity: pressed ? 0.9 : 1,
