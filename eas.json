@@ -1,0 +1,45 @@
+{
+  "cli": {
+    "version": ">= 18.7.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "staging": {
+      "distribution": "internal",
+      "channel": "staging",
+      "autoIncrement": true,
+      "ios": {
+        "simulator": false,
+        "buildConfiguration": "Release"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "staging": {
+      "ios": {
+        "appleId": "choithramani4@gmail.com",
+        "ascAppId": "6762481040",
+        "appleTeamId": "RP423FWHCR"
+      }
+    },
+    "production": {
+      "ios": {
+        "appleId": "choithramani4@gmail.com",
+        "ascAppId": "6762481040",
+        "appleTeamId": "RP423FWHCR"
+      }
+    }
+  }
+}
