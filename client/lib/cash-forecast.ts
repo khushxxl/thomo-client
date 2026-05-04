@@ -63,8 +63,14 @@ function buildProjectionPoints(
     const patternValue = dailyPattern.length
       ? dailyPattern[index % dailyPattern.length] - patternAverage
       : Math.sin(progress * Math.PI * 3 - Math.PI / 5) * dailyVolatility;
+    const horizonWave =
+      horizon === 30
+        ? Math.sin(progress * Math.PI * 1.4)
+        : horizon === 60
+          ? Math.sin(progress * Math.PI * 2.25 - 0.45)
+          : Math.sin(progress * Math.PI * 3.4 - 0.65);
     const volatilityWeight = Math.sin(progress * Math.PI);
-    return currentCash + dailyNet * day + patternValue * volatilityWeight * 2.6;
+    return currentCash + dailyNet * day + patternValue * volatilityWeight * 2.1 + horizonWave * dailyVolatility * volatilityWeight;
   });
 }
 
@@ -90,7 +96,7 @@ export function calculateMagicForecast({
   horizon: ForecastHorizon;
 }): MagicForecast {
   const currentCash = balance?.total_available ?? 0;
-  const currencyTransactions = recentTransactions(transactions);
+  const currencyTransactions = recentTransactions(transactions, horizon);
   const windowDays = activeWindowDays(currencyTransactions);
 
   let income = 0;
@@ -121,7 +127,7 @@ export function calculateMagicForecast({
   const variance = dailyValues.length
     ? dailyValues.reduce((sum, value) => sum + Math.pow(value - dailyAverage, 2), 0) / dailyValues.length
     : 0;
-  const dailyVolatility = Math.sqrt(variance);
+  const dailyVolatility = Math.sqrt(variance) * (horizon === 30 ? 0.55 : horizon === 60 ? 0.85 : 1.18);
   const points = buildProjectionPoints(
     currentCash,
     dailyNet,

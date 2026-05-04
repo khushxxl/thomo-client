@@ -16,16 +16,12 @@ import {
   calculateMagicForecast,
   type ForecastHorizon,
 } from "@/lib/cash-forecast";
+import { formatCurrency } from "@/lib/money";
 
 const HORIZONS: ForecastHorizon[] = [30, 60, 90];
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedLine = Animated.createAnimatedComponent(Line);
-
-function formatMoney(amount: number, currency: string): string {
-  const symbol = currency === "GBP" ? "£" : currency === "USD" ? "$" : currency === "EUR" ? "€" : "";
-  return `${symbol}${Math.round(amount).toLocaleString()}`;
-}
 
 function MetricCard({
   title,
@@ -332,7 +328,7 @@ export default function MagicForecastScreen() {
                       backgroundColor: horizon === item ? "#F8F8F8" : "#FFFFFF",
                     }}
                   >
-                    <TextWrapper weight="regular" style={{ fontSize: 14, color: "#242424" }}>
+                    <TextWrapper weight="regular" style={{ fontSize: 12, color: "#242424" }}>
                       {item} Days
                     </TextWrapper>
                   </Pressable>
@@ -347,13 +343,13 @@ export default function MagicForecastScreen() {
         <View style={{ flexDirection: "row", gap: 14, marginTop: 22 }}>
           <MetricCard
             title="Predicted Cash"
-            value={formatMoney(forecast.predictedCash, currency)}
+            value={formatCurrency(forecast.predictedCash, currency)}
             meta={deltaCopy}
             metaColor={delta >= 0 ? "#00A281" : "#F02E24"}
           />
           <MetricCard
             title="Tax Liability"
-            value={formatMoney(forecast.taxLiability, currency)}
+            value={formatCurrency(forecast.taxLiability, currency)}
             meta={forecast.dueLabel}
             metaColor="#FF9F0A"
           />
@@ -362,12 +358,12 @@ export default function MagicForecastScreen() {
         <View style={{ flexDirection: "row", gap: 14, marginTop: 14 }}>
           <MetricCard
             title="Monthly Burn"
-            value={formatMoney(forecast.monthlyBurn, currency)}
+            value={formatCurrency(forecast.monthlyBurn, currency)}
             meta="Avg"
           />
           <MetricCard
             title="Tax Liability"
-            value={formatMoney(forecast.projectedTaxLiability, currency)}
+            value={formatCurrency(forecast.projectedTaxLiability, currency)}
             meta={forecast.dueLabel}
             metaColor="#FF9F0A"
           />

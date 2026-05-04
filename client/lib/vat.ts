@@ -20,8 +20,12 @@ export function calculateVatLiability(
   transactions: ApiTransaction[],
   windowDays = 90,
 ): VatBreakdown {
-  const now = Date.now();
-  const cutoff = now - windowDays * 24 * 60 * 60 * 1000;
+  const anchor =
+    transactions.reduce((latest, tx) => {
+      const timestamp = new Date(tx.timestamp).getTime();
+      return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
+    }, 0) || Date.now();
+  const cutoff = anchor - windowDays * 24 * 60 * 60 * 1000;
 
   let income = 0;
   let expenses = 0;
@@ -48,6 +52,6 @@ export function calculateVatLiability(
     inputVat,
     liability,
     periodStart: new Date(cutoff).toISOString(),
-    periodEnd: new Date(now).toISOString(),
+    periodEnd: new Date(anchor).toISOString(),
   };
 }

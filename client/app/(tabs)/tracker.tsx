@@ -13,6 +13,7 @@ import { TaxIcon } from "@/components/icons/tax-icon";
 import { Pressable3D } from "@/components/pressable-3d";
 import { ThomoFabIcon } from "@/components/icons/thomo-fab-icon";
 import { useThomo } from "@/lib/thomo-context";
+import { currencySymbol, formatCurrency } from "@/lib/money";
 import {
   annualisedProfit,
   calculateCorporationTax,
@@ -20,19 +21,6 @@ import {
   countMissingReceipts,
   getNextVatDeadline,
 } from "@/lib/tax";
-
-function formatMoney(amount: number, currency: string = "GBP"): string {
-  const symbol = currency === "GBP" ? "£" : currency === "USD" ? "$" : "";
-  return `${symbol}${Math.round(amount).toLocaleString()}`;
-}
-
-function formatMoneyDecimal(amount: number, currency: string = "GBP"): string {
-  const symbol = currency === "GBP" ? "£" : currency === "USD" ? "$" : "";
-  return `${symbol}${amount.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 export default function TrackerScreen() {
   const {
@@ -124,7 +112,7 @@ export default function TrackerScreen() {
               weight="medium"
               style={{ fontSize: 42, color: "#1A1A1A", marginTop: 8 }}
             >
-              {vat ? formatMoney(vat.liability, currency) : "£—"}
+              {vat ? formatCurrency(vat.liability, currency) : `${currencySymbol(currency)}—`}
             </TextWrapper>
           )}
 
@@ -171,7 +159,7 @@ export default function TrackerScreen() {
             style={{ fontSize: 18, color: "#1A1A1A", marginBottom: 6 }}
           >
             {vat
-              ? `Set aside ${formatMoneyDecimal(monthlyVatSetAside, currency)} per month`
+              ? `Set aside ${formatCurrency(monthlyVatSetAside, currency, { decimals: true })} per month`
               : "Set aside for VAT"}
           </TextWrapper>
           <TextWrapper
@@ -231,7 +219,7 @@ export default function TrackerScreen() {
               weight="medium"
               style={{ fontSize: 28, color: "#1A1A1A" }}
             >
-              {vat ? formatMoney(corpTax, currency) : "—"}
+              {vat ? formatCurrency(corpTax, currency) : "—"}
             </TextWrapper>
           </View>
 
@@ -241,7 +229,7 @@ export default function TrackerScreen() {
             style={{ fontSize: 12, color: "#AAA", marginTop: 10 }}
           >
             Projected annual profit:{" "}
-            {vat ? formatMoney(annualProfit, currency) : "—"}
+            {vat ? formatCurrency(annualProfit, currency) : "—"}
           </TextWrapper>
         </View>
 
@@ -314,7 +302,7 @@ export default function TrackerScreen() {
               weight="medium"
               style={{ fontSize: 28, color: "#1A1A1A" }}
             >
-              {vat ? formatMoney(incomeTax, currency) : "—"}
+              {vat ? formatCurrency(incomeTax, currency) : "—"}
             </TextWrapper>
           </View>
 

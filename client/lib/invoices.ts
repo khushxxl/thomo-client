@@ -1,4 +1,5 @@
 import { apiJson } from "@/lib/api";
+import { formatCurrency } from "@/lib/money";
 
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "cancelled" | "pending";
 
@@ -93,11 +94,7 @@ export function formatInvoiceAmount(
   amount: number,
   currency: string = "GBP",
 ): string {
-  const symbol = currency === "GBP" ? "\u00a3" : currency === "USD" ? "$" : "";
-  return `${symbol}${amount.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return formatCurrency(amount, currency, { decimals: true });
 }
 
 export function invoiceDueText(invoice: Invoice): string | null {

@@ -19,6 +19,7 @@ import {
 } from "@/components/connect-bank-sheet";
 import { type ApiTransaction } from "@/lib/api";
 import { useThomo } from "@/lib/thomo-context";
+import { formatCurrency } from "@/lib/money";
 import Svg, { Path, Circle as SvgCircle } from "react-native-svg";
 
 type Section = {
@@ -28,11 +29,7 @@ type Section = {
 };
 
 function formatAmount(amount: number, currency: string): string {
-  const symbol = currency === "GBP" ? "£" : currency === "USD" ? "$" : "";
-  return `${symbol}${Math.abs(amount).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return formatCurrency(Math.abs(amount), currency, { decimals: true });
 }
 
 function formatTime(timestamp: string): string {

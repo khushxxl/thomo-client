@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   ScrollView,
@@ -28,31 +28,34 @@ import {
 import { useThomo } from "@/lib/thomo-context";
 import { useAuth } from "@/lib/auth-context";
 import { calculateMagicForecast } from "@/lib/cash-forecast";
-import Svg, { Circle, Line, Path } from "react-native-svg";
+import { listInvoices, type Invoice } from "@/lib/invoices";
+import { formatCurrency } from "@/lib/money";
+import Svg, { Circle, Line, Path, Text as SvgText } from "react-native-svg";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const AnimatedLine = Animated.createAnimatedComponent(Line);
 
-function formatBalance(amount: number, currency: string): string {
-  const c = currency.toUpperCase();
-  const symbol = c === "GBP" ? "£" : c === "USD" ? "$" : c === "EUR" ? "€" : "";
-  return `${symbol}${amount.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function MiniForecastChart({ points, width }: { points: number[]; width: number }) {
+function MiniForecastChart({ points, width, currency }: { points: number[]; width: number; currency: string }) {
   const drawProgress = useSharedValue(0);
   const chartWidth = Math.max(260, width);
   const chartHeight = 160;
+  const chartLeft = 44;
+  const chartRight = 10;
+  const chartTop = 10;
+  const chartBottom = 20;
+  const chartInnerWidth = chartWidth - chartLeft - chartRight;
+  const chartInnerHeight = chartHeight - chartTop - chartBottom;
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = Math.max(1, max - min);
-  const xForIndex = (index: number) => 10 + (index / Math.max(1, points.length - 1)) * (chartWidth - 20);
-  const yForValue = (value: number) => 132 - ((value - min) / range) * 104;
+  const xForIndex = (index: number) => chartLeft + (index / Math.max(1, points.length - 1)) * chartInnerWidth;
+  const yForValue = (value: number) => chartTop + (1 - (value - min) / range) * chartInnerHeight;
+  const gridValues = [max, min + range * 0.66, min + range * 0.33, min];
+  const yLabels = gridValues.map((value) =>
+    formatCurrency(Math.max(0, value), currency, { compact: true }),
+  );
+  const gridYs = [0, 1, 2, 3].map((index) => chartTop + (index / 3) * chartInnerHeight);
   const mappedPoints = points.map((point, index) => ({
     x: xForIndex(index),
     y: yForValue(point),
@@ -63,10 +66,6 @@ function MiniForecastChart({ points, width }: { points: number[]; width: number 
     const controlGap = (point.x - previous.x) * 0.42;
     return `${nextPath} C ${(previous.x + controlGap).toFixed(1)} ${previous.y.toFixed(1)}, ${(point.x - controlGap).toFixed(1)} ${point.y.toFixed(1)}, ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
   }, "");
-  const trendIsNegative = points[points.length - 1] < points[0];
-  const markerValue = trendIsNegative ? min : max;
-  const markerIndex = Math.max(1, Math.min(points.length - 2, points.indexOf(markerValue)));
-  const marker = mappedPoints[markerIndex];
   const totalLength = chartWidth * 2.4;
 
   useEffect(() => {
@@ -86,21 +85,31 @@ function MiniForecastChart({ points, width }: { points: number[]; width: number 
 
   return (
     <Svg width={chartWidth} height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`}>
-      {[0, 1, 2].map((line) => {
-        const y = 36 + line * 42;
-        return (
-          <Line
-            key={line}
-            x1={10}
-            y1={y}
-            x2={chartWidth - 10}
-            y2={y}
-            stroke="#E6E6E6"
-            strokeWidth={1}
-            strokeDasharray="5 5"
-          />
-        );
-      })}
+      {gridYs.map((y, index) => (
+        <SvgText
+          key={`label-${index}`}
+          x={chartLeft - 8}
+          y={y + 4}
+          textAnchor="end"
+          fontSize={10}
+          fontFamily="NeueMontreal-Regular"
+          fill="#BBBBBB"
+        >
+          {yLabels[index]}
+        </SvgText>
+      ))}
+      {gridYs.map((y, index) => (
+        <Line
+          key={`grid-${index}`}
+          x1={chartLeft}
+          y1={y}
+          x2={chartWidth - chartRight}
+          y2={y}
+          stroke="#E8E8E8"
+          strokeWidth={0.8}
+          strokeDasharray="4 4"
+        />
+      ))}
       <AnimatedPath
         animatedProps={curveProps}
         d={path}
@@ -111,8 +120,18 @@ function MiniForecastChart({ points, width }: { points: number[]; width: number 
         strokeLinejoin="round"
         strokeDasharray={totalLength}
       />
-      <AnimatedLine animatedProps={markerProps} x1={marker.x} y1={24} x2={marker.x} y2={134} stroke="#FF3328" strokeWidth={1} strokeDasharray="4 4" />
-      <AnimatedCircle animatedProps={markerProps} cx={marker.x} cy={marker.y} r={3.4} fill="#FF3328" />
+      {mappedPoints.map((point, index) => (
+        <AnimatedCircle
+          key={`point-${index}`}
+          animatedProps={markerProps}
+          cx={point.x}
+          cy={point.y}
+          r={4}
+          fill="#FFFFFF"
+          stroke="#1A1A1A"
+          strokeWidth={1.5}
+        />
+      ))}
     </Svg>
   );
 }
@@ -136,6 +155,19 @@ export default function DashboardScreen() {
     null;
 
   const sheetRef = useRef<ConnectBankSheetRef>(null);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+
+  const loadInvoices = useCallback(async () => {
+    setInvoicesLoading(true);
+    try {
+      setInvoices(await listInvoices());
+    } catch (error) {
+      console.error("Dashboard invoices load failed:", error);
+    } finally {
+      setInvoicesLoading(false);
+    }
+  }, []);
 
   // Auto-open the connect sheet whenever the user is unconnected.
   useEffect(() => {
@@ -148,13 +180,45 @@ export default function DashboardScreen() {
     }
   }, [connected]);
 
+  useEffect(() => {
+    if (connected === true) {
+      loadInvoices();
+    } else if (connected === false) {
+      setInvoices([]);
+    }
+  }, [connected, loadInvoices]);
+
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([refresh(), loadInvoices()]);
+  }, [loadInvoices, refresh]);
+
   const hasBalance = !!balance;
   const showSkeleton = connected !== true;
-  const currency = balance?.currency ?? "GBP";
+  const currency = balance?.currency ?? invoices[0]?.currency ?? "GBP";
   const dashboardForecast = useMemo(
     () => calculateMagicForecast({ balance, transactions, vat, horizon: 90 }),
     [balance, transactions, vat],
   );
+  const cashflowCopy =
+    dashboardForecast.predictedDeltaPercent >= 0
+      ? `Projected ${dashboardForecast.predictedDeltaPercent}% surplus over 90 days`
+      : `Projected ${Math.abs(dashboardForecast.predictedDeltaPercent)}% cash tightening over 90 days`;
+  const receivables = useMemo(() => {
+    const openInvoices = invoices.filter((invoice) =>
+      ["sent", "overdue", "pending"].includes(invoice.status),
+    );
+    const overdueCount = openInvoices.filter((invoice) => {
+      if (invoice.status === "overdue") return true;
+      if (!invoice.due_date) return false;
+      return new Date(invoice.due_date).getTime() < Date.now();
+    }).length;
+
+    return {
+      total: openInvoices.reduce((sum, invoice) => sum + (Number(invoice.amount) || 0), 0),
+      count: openInvoices.length,
+      overdueCount,
+    };
+  }, [invoices]);
 
   return (
     <View className="flex-1 bg-[#F9F9F9]">
@@ -165,7 +229,7 @@ export default function DashboardScreen() {
         contentContainerStyle={{ paddingBottom: 32, gap: 10 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={refresh} />
+          <RefreshControl refreshing={refreshing || invoicesLoading} onRefresh={handleRefresh} />
         }
       >
         {/* Header */}
@@ -230,7 +294,7 @@ export default function DashboardScreen() {
               weight="medium"
               style={{ fontSize: 42, color: "#1A1A1A", marginTop: 8 }}
             >
-              {formatBalance(balance.total_available, balance.currency)}
+              {formatCurrency(balance.total_available, balance.currency, { decimals: true })}
             </TextWrapper>
           ) : (
             <TextWrapper
@@ -272,7 +336,7 @@ export default function DashboardScreen() {
               weight="medium"
               style={{ fontSize: 17, color: "#1A1A1A", marginBottom: 4 }}
             >
-              {vat ? formatBalance(vat.liability, currency) : "—"}
+              {vat ? formatCurrency(vat.liability, currency, { decimals: true }) : "—"}
             </TextWrapper>
             <TextWrapper
               weight="regular"
@@ -296,13 +360,15 @@ export default function DashboardScreen() {
               weight="medium"
               style={{ fontSize: 17, color: "#1A1A1A", marginBottom: 4 }}
             >
-              —
+              {invoicesLoading ? "..." : formatCurrency(receivables.total, currency, { decimals: true })}
             </TextWrapper>
             <TextWrapper
               weight="regular"
               style={{ fontSize: 13, color: "#999" }}
             >
-              Awaiting data
+              {receivables.count > 0
+                ? `${receivables.count} open${receivables.overdueCount ? `, ${receivables.overdueCount} overdue` : ""}`
+                : "No open invoices"}
             </TextWrapper>
           </View>
         </View>
@@ -335,7 +401,7 @@ export default function DashboardScreen() {
               >
                 {showSkeleton
                   ? "Awaiting data"
-                  : "Healthy surplus expected for Q3"}
+                  : cashflowCopy}
               </TextWrapper>
             </View>
             <Pressable
@@ -386,7 +452,7 @@ export default function DashboardScreen() {
             className="rounded-2xl bg-white"
             style={{ padding: 16 }}
           >
-            <MiniForecastChart points={dashboardForecast.points} width={SCREEN_WIDTH - 72} />
+            <MiniForecastChart points={dashboardForecast.points} width={SCREEN_WIDTH - 72} currency={currency} />
 
             <View
               className="flex-row justify-between mt-3"

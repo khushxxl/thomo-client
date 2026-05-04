@@ -3,6 +3,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { TextWrapper } from "@/components/text-wrapper";
 import { ChevronLeftIcon } from "@/components/icons/chevron-left-icon";
+import { formatCurrency } from "@/lib/money";
 import * as Haptics from "expo-haptics";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -52,11 +53,7 @@ export default function TransactionDetailScreen() {
   const isIncome = params.isIncome === "true";
   const amount = parseFloat(params.amount || "0");
   const currency = (params.currency || "GBP").toUpperCase();
-  const symbol = currency === "GBP" ? "£" : currency === "USD" ? "$" : currency === "EUR" ? "€" : "";
-  const formattedAmount = `${isIncome ? "+" : "-"}${symbol}${amount.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  const formattedAmount = `${isIncome ? "+" : "-"}${formatCurrency(amount, currency, { decimals: true })}`;
 
   const txType = isIncome ? "credit" : "debit";
   const category = params.category || "Uncategorised";
@@ -157,10 +154,7 @@ export default function TransactionDetailScreen() {
           {time !== "" && <DetailRow label="Time" value={time} />}
           <DetailRow
             label="Amount"
-            value={`${symbol}${amount.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}`}
+            value={formatCurrency(amount, currency, { decimals: true })}
           />
           <DetailRow label="Currency" value={currency} />
           {transactionId !== "" && (
