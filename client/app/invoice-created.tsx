@@ -10,6 +10,7 @@ import { ChevronLeftIcon } from "@/components/icons/chevron-left-icon";
 import { InvoiceStatusBadge } from "@/components/invoice/status-badge";
 import { getErrorMessage } from "@/lib/api";
 import { buildInvoiceEmail, buildMailtoUrl } from "@/lib/invoice-email";
+import { shareInvoicePdf } from "@/lib/invoice-pdf";
 import { INVOICE_RADIUS } from "@/lib/invoice-ui";
 import {
   formatInvoiceAmount,
@@ -49,7 +50,7 @@ export default function InvoiceCreatedScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preparedEmail, setPreparedEmail] = useState(false);
-  const [actionLoading, setActionLoading] = useState<"open-email" | "confirm-sent" | null>(null);
+  const [actionLoading, setActionLoading] = useState<"open-email" | "confirm-sent" | "pdf" | null>(null);
 
   const load = useCallback(async () => {
     if (!params.id) {
@@ -123,6 +124,20 @@ export default function InvoiceCreatedScreen() {
       });
     } catch (err) {
       setError(getErrorMessage(err, "Could not mark this invoice as sent."));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!invoice || !details) return;
+    setActionLoading("pdf");
+    setError(null);
+    try {
+      await shareInvoicePdf(invoice, details.draft);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (err) {
+      setError(getErrorMessage(err, "Could not prepare the invoice PDF."));
     } finally {
       setActionLoading(null);
     }
@@ -256,6 +271,24 @@ export default function InvoiceCreatedScreen() {
                   >
                     <TextWrapper weight="medium" style={{ fontSize: 16, color: "#FFFFFF" }}>
                       {actionLoading === "open-email" ? "Opening email..." : "Open email draft"}
+                    </TextWrapper>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={handleDownloadPdf}
+                    disabled={actionLoading === "pdf"}
+                    style={{
+                      backgroundColor: "#FFFFFF",
+                      borderRadius: INVOICE_RADIUS.control,
+                      borderWidth: 1,
+                      borderColor: "#ECECEC",
+                      paddingVertical: 18,
+                      alignItems: "center",
+                      opacity: actionLoading === "pdf" ? 0.7 : 1,
+                    }}
+                  >
+                    <TextWrapper weight="medium" style={{ fontSize: 16, color: "#171717" }}>
+                      {actionLoading === "pdf" ? "Preparing PDF..." : "Download PDF"}
                     </TextWrapper>
                   </Pressable>
 

@@ -9,7 +9,7 @@ import { ChevronLeftIcon } from "@/components/icons/chevron-left-icon";
 import { InvoiceStatusBadge } from "@/components/invoice/status-badge";
 import { getErrorMessage } from "@/lib/api";
 import { buildInvoiceEmail, buildMailtoUrl } from "@/lib/invoice-email";
-import { INVOICE_RADIUS } from "@/lib/invoice-ui";
+import { shareInvoicePdf } from "@/lib/invoice-pdf";
 import {
   formatInvoiceAmount,
   getInvoice,
@@ -46,7 +46,7 @@ export default function InvoiceDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<"open-email" | "confirm-sent" | "paid" | null>(null);
+  const [actionLoading, setActionLoading] = useState<"open-email" | "confirm-sent" | "paid" | "pdf" | null>(null);
   const [preparedEmail, setPreparedEmail] = useState(false);
 
   const loadInvoice = useCallback(async () => {
@@ -98,6 +98,20 @@ export default function InvoiceDetailScreen() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!invoice || !details) return;
+    setActionError(null);
+    setActionLoading("pdf");
+    try {
+      await shareInvoicePdf(invoice, details.draft);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (err) {
+      setActionError(getErrorMessage(err, "Could not prepare the invoice PDF."));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleMarkPaid = async () => {
     if (!invoice) return;
     setActionError(null);
@@ -108,6 +122,23 @@ export default function InvoiceDetailScreen() {
       router.replace({ pathname: "/invoice-created", params: { id: updated.id, state: "paid" } });
     } catch (err) {
       setActionError(getErrorMessage(err, "Could not mark this invoice as paid."));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleConfirmSent = async () => {
+    if (!invoice) return;
+    setActionError(null);
+    setActionLoading("confirm-sent");
+    try {
+      const updated = await sendInvoice(invoice.id);
+      setInvoice(updated);
+      setPreparedEmail(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace({ pathname: "/invoice-created", params: { id: updated.id, state: "sent" } });
+    } catch (err) {
+      setActionError(getErrorMessage(err, "Could not mark this invoice as sent."));
     } finally {
       setActionLoading(null);
     }
@@ -173,36 +204,54 @@ export default function InvoiceDetailScreen() {
                 <TextWrapper weight="medium" style={{ fontSize: 16, color: "#1F1F1F" }}>
                   Invoice #{details.draft.invoice_number.replace(/[^0-9]/g, "") || "Draft"}
                 </TextWrapper>
-                <Pressable onPress={() => {}}>
+                <Pressable onPress={handleDownloadPdf} disabled={actionLoading !== null}>
                   <TextWrapper weight="medium" style={{ fontSize: 16, color: "#1F1F1F" }}>
-                    Download PDF
+                    {actionLoading === "pdf" ? "Preparing..." : "Download PDF"}
                   </TextWrapper>
                 </Pressable>
               </View>
+              {actionError ? (
+                <TextWrapper weight="regular" style={{ fontSize: 13, color: "#DC2626", marginTop: 12 }}>
+                  {actionError}
+                </TextWrapper>
+              ) : null}
             </View>
           </ScrollView>
 
           <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#F9F9F9", paddingHorizontal: 20, paddingBottom: 40, paddingTop: 12 }}>
             {invoice.status === "draft" ? (
-              <View style={{ flexDirection: "row", gap: 12 }}>
-                <Pressable
-                  onPress={() => router.push({ pathname: "/create-invoice", params: { id: invoice.id, draft: JSON.stringify(details.draft), source: "detail" } })}
-                  style={{ flex: 1, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#1F1F1F", borderRadius: 16, height: 56, alignItems: "center", justifyContent: "center" }}
-                >
-                  <TextWrapper weight="medium" style={{ fontSize: 16, color: "#171717" }}>
-                    Edit Invoice
-                  </TextWrapper>
-                </Pressable>
+              <View style={{ gap: 12 }}>
+                <View style={{ flexDirection: "row", gap: 12 }}>
+                  <Pressable
+                    onPress={() => router.push({ pathname: "/create-invoice", params: { id: invoice.id, draft: JSON.stringify(details.draft), source: "detail" } })}
+                    style={{ flex: 1, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#1F1F1F", borderRadius: 16, height: 56, alignItems: "center", justifyContent: "center" }}
+                  >
+                    <TextWrapper weight="medium" style={{ fontSize: 16, color: "#171717" }}>
+                      Edit Invoice
+                    </TextWrapper>
+                  </Pressable>
 
-                <Pressable
-                  onPress={handleOpenEmailDraft}
-                  disabled={actionLoading !== null}
-                  style={{ flex: 1, backgroundColor: "#1F1F1F", borderRadius: 16, height: 56, alignItems: "center", justifyContent: "center", opacity: actionLoading !== null ? 0.7 : 1 }}
-                >
-                  <TextWrapper weight="medium" style={{ fontSize: 16, color: "#FFFFFF" }}>
-                    {actionLoading === "open-email" ? "Opening..." : "Send Email"}
-                  </TextWrapper>
-                </Pressable>
+                  <Pressable
+                    onPress={handleOpenEmailDraft}
+                    disabled={actionLoading !== null}
+                    style={{ flex: 1, backgroundColor: "#1F1F1F", borderRadius: 16, height: 56, alignItems: "center", justifyContent: "center", opacity: actionLoading !== null ? 0.7 : 1 }}
+                  >
+                    <TextWrapper weight="medium" style={{ fontSize: 16, color: "#FFFFFF" }}>
+                      {actionLoading === "open-email" ? "Opening..." : "Send Email"}
+                    </TextWrapper>
+                  </Pressable>
+                </View>
+                {preparedEmail ? (
+                  <Pressable
+                    onPress={handleConfirmSent}
+                    disabled={actionLoading !== null}
+                    style={{ backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#ECECEC", borderRadius: 16, height: 54, alignItems: "center", justifyContent: "center", opacity: actionLoading !== null ? 0.7 : 1 }}
+                  >
+                    <TextWrapper weight="medium" style={{ fontSize: 16, color: "#171717" }}>
+                      {actionLoading === "confirm-sent" ? "Updating..." : "I've sent it"}
+                    </TextWrapper>
+                  </Pressable>
+                ) : null}
               </View>
             ) : invoice.status === "paid" ? (
               <View
@@ -213,14 +262,26 @@ export default function InvoiceDetailScreen() {
                 </TextWrapper>
               </View>
             ) : (
-              <Pressable
-                onPress={handleOpenEmailDraft}
-                style={{ backgroundColor: "rgba(0, 162, 129, 0.08)", borderWidth: 1, borderColor: "#00A281", borderRadius: 16, height: 56, alignItems: "center", justifyContent: "center" }}
-              >
-                <TextWrapper weight="medium" style={{ fontSize: 16, color: "#00A281" }}>
-                  Remainder Sent
-                </TextWrapper>
-              </Pressable>
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <Pressable
+                  onPress={handleOpenEmailDraft}
+                  disabled={actionLoading !== null}
+                  style={{ flex: 1, backgroundColor: "rgba(0, 162, 129, 0.08)", borderWidth: 1, borderColor: "#00A281", borderRadius: 16, height: 56, alignItems: "center", justifyContent: "center", opacity: actionLoading !== null ? 0.7 : 1 }}
+                >
+                  <TextWrapper weight="medium" style={{ fontSize: 15, color: "#00A281" }}>
+                    {actionLoading === "open-email" ? "Opening..." : "Send reminder"}
+                  </TextWrapper>
+                </Pressable>
+                <Pressable
+                  onPress={handleMarkPaid}
+                  disabled={actionLoading !== null}
+                  style={{ flex: 1, backgroundColor: "#1F1F1F", borderRadius: 16, height: 56, alignItems: "center", justifyContent: "center", opacity: actionLoading !== null ? 0.7 : 1 }}
+                >
+                  <TextWrapper weight="medium" style={{ fontSize: 15, color: "#FFFFFF" }}>
+                    {actionLoading === "paid" ? "Updating..." : "Mark paid"}
+                  </TextWrapper>
+                </Pressable>
+              </View>
             )}
           </View>
         </>
