@@ -1,7 +1,6 @@
 import "../global.css";
 
 import {
-  DarkTheme,
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
@@ -14,7 +13,6 @@ import "react-native-reanimated";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import "expo-dev-client";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { AuthProvider } from "@/lib/auth-context";
 import { ThomoProvider } from "@/lib/thomo-context";
 
@@ -25,7 +23,6 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [fontsLoaded] = useFonts({
     "NeueMontreal-Light": require("../assets/fonts/NeueMontreal-Light.otf"),
     "NeueMontreal-Regular": require("../assets/fonts/NeueMontreal-Regular.otf"),
@@ -134,6 +131,13 @@ export default function RootLayout() {
                 />
                 <Stack.Screen
                   name="thomo-chat"
+                  options={{
+                    headerShown: false,
+                    animation: "slide_from_right",
+                  }}
+                />
+                <Stack.Screen
+                  name="magic-forecast"
                   options={{
                     headerShown: false,
                     animation: "slide_from_right",

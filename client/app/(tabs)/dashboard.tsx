@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   View,
   ScrollView,
@@ -10,8 +10,13 @@ import {
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Image } from "expo-image";
+import Animated, {
+  Easing,
+  useAnimatedProps,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { TextWrapper } from "@/components/text-wrapper";
-import { PredictionChart } from "@/components/icons/prediction-chart";
 import { BellIcon } from "@/components/icons/bell-icon";
 import { AlertIcon } from "@/components/icons/alert-icon";
 import { ThomoFabIcon } from "@/components/icons/thomo-fab-icon";
@@ -22,8 +27,13 @@ import {
 } from "@/components/connect-bank-sheet";
 import { useThomo } from "@/lib/thomo-context";
 import { useAuth } from "@/lib/auth-context";
+import { calculateMagicForecast } from "@/lib/cash-forecast";
+import Svg, { Circle, Line, Path } from "react-native-svg";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedLine = Animated.createAnimatedComponent(Line);
 
 function formatBalance(amount: number, currency: string): string {
   const c = currency.toUpperCase();
@@ -34,12 +44,86 @@ function formatBalance(amount: number, currency: string): string {
   })}`;
 }
 
+function MiniForecastChart({ points, width }: { points: number[]; width: number }) {
+  const drawProgress = useSharedValue(0);
+  const chartWidth = Math.max(260, width);
+  const chartHeight = 160;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = Math.max(1, max - min);
+  const xForIndex = (index: number) => 10 + (index / Math.max(1, points.length - 1)) * (chartWidth - 20);
+  const yForValue = (value: number) => 132 - ((value - min) / range) * 104;
+  const mappedPoints = points.map((point, index) => ({
+    x: xForIndex(index),
+    y: yForValue(point),
+  }));
+  const path = mappedPoints.reduce((nextPath, point, index) => {
+    if (index === 0) return `M ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+    const previous = mappedPoints[index - 1];
+    const controlGap = (point.x - previous.x) * 0.42;
+    return `${nextPath} C ${(previous.x + controlGap).toFixed(1)} ${previous.y.toFixed(1)}, ${(point.x - controlGap).toFixed(1)} ${point.y.toFixed(1)}, ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+  }, "");
+  const trendIsNegative = points[points.length - 1] < points[0];
+  const markerValue = trendIsNegative ? min : max;
+  const markerIndex = Math.max(1, Math.min(points.length - 2, points.indexOf(markerValue)));
+  const marker = mappedPoints[markerIndex];
+  const totalLength = chartWidth * 2.4;
+
+  useEffect(() => {
+    drawProgress.value = 0;
+    drawProgress.value = withTiming(1, {
+      duration: 800,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [drawProgress, path]);
+
+  const curveProps = useAnimatedProps(() => ({
+    strokeDashoffset: totalLength * (1 - drawProgress.value),
+  }));
+  const markerProps = useAnimatedProps(() => ({
+    opacity: drawProgress.value,
+  }));
+
+  return (
+    <Svg width={chartWidth} height={chartHeight} viewBox={`0 0 ${chartWidth} ${chartHeight}`}>
+      {[0, 1, 2].map((line) => {
+        const y = 36 + line * 42;
+        return (
+          <Line
+            key={line}
+            x1={10}
+            y1={y}
+            x2={chartWidth - 10}
+            y2={y}
+            stroke="#E6E6E6"
+            strokeWidth={1}
+            strokeDasharray="5 5"
+          />
+        );
+      })}
+      <AnimatedPath
+        animatedProps={curveProps}
+        d={path}
+        fill="none"
+        stroke="#171717"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray={totalLength}
+      />
+      <AnimatedLine animatedProps={markerProps} x1={marker.x} y1={24} x2={marker.x} y2={134} stroke="#FF3328" strokeWidth={1} strokeDasharray="4 4" />
+      <AnimatedCircle animatedProps={markerProps} cx={marker.x} cy={marker.y} r={3.4} fill="#FF3328" />
+    </Svg>
+  );
+}
+
 export default function DashboardScreen() {
   const { user } = useAuth();
   const {
     connected,
     balance,
     vat,
+    transactions,
     balanceLoading,
     refreshing,
     refresh,
@@ -67,6 +151,10 @@ export default function DashboardScreen() {
   const hasBalance = !!balance;
   const showSkeleton = connected !== true;
   const currency = balance?.currency ?? "GBP";
+  const dashboardForecast = useMemo(
+    () => calculateMagicForecast({ balance, transactions, vat, horizon: 90 }),
+    [balance, transactions, vat],
+  );
 
   return (
     <View className="flex-1 bg-[#F9F9F9]">
@@ -251,6 +339,7 @@ export default function DashboardScreen() {
               </TextWrapper>
             </View>
             <Pressable
+              onPress={() => router.push("/magic-forecast")}
               className="rounded-xl bg-[#1A1A1A]"
               style={{ paddingHorizontal: 16, paddingVertical: 10 }}
             >
@@ -292,8 +381,12 @@ export default function DashboardScreen() {
             </Pressable>
           </View>
 
-          <View className="rounded-2xl bg-white" style={{ padding: 16 }}>
-            <PredictionChart width={SCREEN_WIDTH - 72} height={160} />
+          <Pressable
+            onPress={() => router.push("/magic-forecast")}
+            className="rounded-2xl bg-white"
+            style={{ padding: 16 }}
+          >
+            <MiniForecastChart points={dashboardForecast.points} width={SCREEN_WIDTH - 72} />
 
             <View
               className="flex-row justify-between mt-3"
@@ -309,7 +402,7 @@ export default function DashboardScreen() {
                 </TextWrapper>
               ))}
             </View>
-          </View>
+          </Pressable>
         </View>
       </ScrollView>
 

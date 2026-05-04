@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView } from "@gorhom/bottom-sheet";
 import { TextWrapper } from "@/components/text-wrapper";
-import { DocIcon, ThomoSmallIcon } from "@/components/icons";
+import { DocIcon, ManualIcon, ThomoSmallIcon } from "@/components/icons";
 
 type CreateOption = "thomo" | "manual";
 
@@ -120,7 +120,7 @@ export const CreateInvoiceSheet = forwardRef<BottomSheetModal>((props, ref) => {
           }}
         >
           <View style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center" }}>
-            <DocIcon size={24} />
+            <ManualIcon size={24} />
           </View>
           <View style={{ flex: 1, marginLeft: 16 }}>
             <TextWrapper weight="medium" style={{ fontSize: 16, color: "#1A1A1A" }}>

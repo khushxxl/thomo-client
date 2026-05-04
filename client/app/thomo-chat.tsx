@@ -19,6 +19,7 @@ import { StatusBar } from "expo-status-bar";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import Svg, { Circle, Line, Path } from "react-native-svg";
+import { ThomoAiBubble } from "@/components/thomo-ai/chat-bubble";
 import { TextWrapper } from "@/components/text-wrapper";
 import { ChevronLeftIcon } from "@/components/icons/chevron-left-icon";
 import {
@@ -144,51 +145,6 @@ function SearchIcon({ size = 20, color = "#8D8D8D" }: { size?: number; color?: s
   );
 }
 
-function MessageIcon({ size = 20, color = "#171717" }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M5 6.5C5 5.12 6.12 4 7.5 4H16.5C17.88 4 19 5.12 19 6.5V13.5C19 14.88 17.88 16 16.5 16H10L6 20V16.2C5.41 15.91 5 15.31 5 14.6V6.5Z"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-function GlobeIcon({ size = 20 }: { size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
-      <Circle cx={10} cy={10} r={8} stroke="#999" strokeWidth={1.3} />
-      <Path d="M2 10H18M10 2C12.5 4.5 13 7 13 10C13 13 12.5 15.5 10 18M10 2C7.5 4.5 7 7 7 10C7 13 7.5 15.5 10 18" stroke="#999" strokeWidth={1.3} />
-    </Svg>
-  );
-}
-
-function AttachIcon({ size = 20 }: { size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
-      <Path
-        d="M15 6.5V14.5C15 16.71 13.21 18.5 11 18.5C8.79 18.5 7 16.71 7 14.5V5C7 3.62 8.12 2.5 9.5 2.5C10.88 2.5 12 3.62 12 5V13.5C12 14.05 11.55 14.5 11 14.5C10.45 14.5 10 14.05 10 13.5V6.5"
-        stroke="#999"
-        strokeWidth={1.3}
-        strokeLinecap="round"
-      />
-    </Svg>
-  );
-}
-
-function MicIcon({ size = 20 }: { size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
-      <Path d="M10 1.5C8.62 1.5 7.5 2.62 7.5 4V10C7.5 11.38 8.62 12.5 10 12.5C11.38 12.5 12.5 11.38 12.5 10V4C12.5 2.62 11.38 1.5 10 1.5Z" stroke="#999" strokeWidth={1.3} />
-      <Path d="M5 9V10C5 12.76 7.24 15 10 15C12.76 15 15 12.76 15 10V9" stroke="#999" strokeWidth={1.3} strokeLinecap="round" />
-      <Path d="M10 15V18.5" stroke="#999" strokeWidth={1.3} strokeLinecap="round" />
-    </Svg>
-  );
-}
-
 function SendArrowIcon({ size = 14 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 14 14" fill="none">
@@ -229,44 +185,54 @@ function isInvoiceIntent(text: string): boolean {
   );
 }
 
-const EmptyChatState = memo(function EmptyChatState() {
+const STARTER_PROMPTS = [
+  "Summarize this week's spending",
+  "Where can I reduce costs?",
+  "Check my invoice follow-ups",
+];
+
+const EmptyChatState = memo(function EmptyChatState({
+  onSelectPrompt,
+}: {
+  onSelectPrompt: (prompt: string) => void;
+}) {
   return (
-    <View className="items-center" style={{ flex: 1, justifyContent: "center", paddingHorizontal: 28, paddingBottom: 60 }}>
+    <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: 24, paddingBottom: 56 }}>
       <Image
         source={require("../assets/images/logo.png")}
-        style={{ width: 64, height: 64, borderRadius: 16 }}
+        style={{ width: 72, height: 72, borderRadius: 18, alignSelf: "center" }}
         contentFit="contain"
         cachePolicy="memory-disk"
       />
-      <TextWrapper weight="medium" style={{ fontSize: 16, color: "#1A1A1A", marginTop: 12 }}>
-        Hey, I&apos;m Thomo
+      <TextWrapper weight="bold" style={{ fontSize: 22, color: "#171717", marginTop: 18, textAlign: "center" }}>
+        Ask Thomo anything
       </TextWrapper>
-      <TextWrapper weight="regular" style={{ fontSize: 14, color: "#999", marginTop: 4, textAlign: "center" }}>
-        Your AI CFO. Ask me anything about your finances.
+      <TextWrapper weight="regular" style={{ fontSize: 14, color: "#737373", marginTop: 7, textAlign: "center", lineHeight: 20 }}>
+        Your financial workspace is ready.
       </TextWrapper>
+      <View style={{ gap: 10, marginTop: 26 }}>
+        {STARTER_PROMPTS.map((prompt) => (
+          <Pressable
+            key={prompt}
+            onPress={() => onSelectPrompt(prompt)}
+            style={{
+              borderWidth: 1,
+              borderColor: "#E7E7E7",
+              borderRadius: 14,
+              paddingHorizontal: 16,
+              paddingVertical: 13,
+              backgroundColor: "#FAFAFA",
+            }}
+          >
+            <TextWrapper weight="medium" style={{ fontSize: 14, color: "#262626", textAlign: "center" }}>
+              {prompt}
+            </TextWrapper>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 });
-
-const TypingDots = memo(function TypingDots() {
-  const [count, setCount] = useState(1);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCount((value) => (value >= 3 ? 1 : value + 1));
-    }, 230);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <TextWrapper weight="medium" style={{ fontSize: 18, color: "#6F6F6F", minWidth: 34, letterSpacing: 1.5 }}>
-      {".".repeat(count)}
-    </TextWrapper>
-  );
-});
-
-import { ThomoAiBubble } from "@/components/thomo-ai/chat-bubble";
 
 const ChatMessageBubble = memo(function ChatMessageBubble({ msg }: { msg: Message }) {
   if (msg.isUser) {
@@ -416,31 +382,33 @@ export default function ThomoChatScreen() {
       return;
     }
 
+    let cancelled = false;
     fetchConversations()
       .then((data) => {
+        if (cancelled) return;
+        const currentSnapshot = chatMemory[cacheKey];
         setConversations(data);
         chatMemory[cacheKey] = {
           conversations: data,
-          activeConversationId,
-          messages,
-          inputText,
-          messageCache,
+          activeConversationId: currentSnapshot?.activeConversationId ?? null,
+          messages: currentSnapshot?.messages ?? [],
+          inputText: currentSnapshot?.inputText ?? "",
+          messageCache: currentSnapshot?.messageCache ?? {},
           fetchedAt: Date.now(),
         };
       })
       .catch((err) => {
+        if (cancelled) return;
         console.error("Failed to load conversations:", err);
-        if (conversations.length === 0) setConversations(DUMMY_CONVERSATIONS);
+        setConversations((current) =>
+          current.length === 0 ? DUMMY_CONVERSATIONS : current,
+        );
       });
-  }, [
-    activeConversationId,
-    cacheKey,
-    chatHydrated,
-    conversations.length,
-    inputText,
-    messageCache,
-    messages,
-  ]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheKey, chatHydrated]);
 
   useEffect(() => {
     if (!chatHydrated) return;
@@ -750,7 +718,7 @@ export default function ThomoChatScreen() {
         </View>
 
         {messages.length === 0 ? (
-          <EmptyChatState />
+          <EmptyChatState onSelectPrompt={setInputText} />
         ) : (
           <FlatList
             ref={listRef}
@@ -803,15 +771,10 @@ export default function ThomoChatScreen() {
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                justifyContent: "space-between",
+                justifyContent: "flex-end",
                 marginTop: 4,
               }}
             >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-                <GlobeIcon size={20} />
-                <AttachIcon size={20} />
-                <MicIcon size={20} />
-              </View>
               <Pressable
                 onPress={handleSend}
                 disabled={sending || !inputText.trim()}
@@ -873,6 +836,24 @@ export default function ThomoChatScreen() {
             }}
           >
             <View style={{ paddingHorizontal: 20, marginBottom: 20 }}>
+              <Pressable
+                onPress={() => toggleSidebar(false, startNewChat)}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  backgroundColor: "#171717",
+                  borderRadius: 14,
+                  paddingHorizontal: 16,
+                  paddingVertical: 13,
+                  marginBottom: 12,
+                }}
+              >
+                <NewChatIcon size={18} color="#FFFFFF" />
+                <TextWrapper weight="medium" style={{ fontSize: 15, color: "#FFFFFF" }}>
+                  New chat
+                </TextWrapper>
+              </Pressable>
               <View
                 style={{
                   flexDirection: "row",

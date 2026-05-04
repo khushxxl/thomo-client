@@ -94,13 +94,13 @@ export type ApiBalance = {
   total_available: number;
   total_current: number;
   currency: string;
-  accounts: Array<{
+  accounts: {
     account_id: string;
     account_name: string;
     available: number;
     current: number;
     currency: string;
-  }>;
+  }[];
 };
 
 async function api(path: string, init: RequestInit = {}): Promise<Response> {

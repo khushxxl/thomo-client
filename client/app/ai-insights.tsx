@@ -26,7 +26,6 @@ import {
   formatMoney,
   formatPeriodSpend,
   formatComparison,
-  formatAverageDelta,
   defaultDateLabel,
   type InsightPeriod,
 } from "@/components/ai-insights/helpers";
@@ -208,7 +207,7 @@ export default function AiInsightsScreen() {
                   {summary.dateLabel}
                 </TextWrapper>
                 <TextWrapper weight="regular" style={{ fontSize: 13, color: "#777777", marginTop: 4 }}>
-                  {formatMoney(insights.spent_today.amount)} {formatPeriodSpend(period)}, up {Math.abs(Math.round(insights.spent_today.percentage_vs_average))}%
+                  {formatMoney(insights.spent_today.amount)} {formatPeriodSpend(period)}, {formatComparison(summary.percentage, summary.comparisonCopy).toLowerCase()}
                 </TextWrapper>
               </View>
             </View>
