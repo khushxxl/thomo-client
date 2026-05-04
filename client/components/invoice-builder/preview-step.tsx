@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { ActivityIndicator, Platform, Pressable, ScrollView, View } from "react-native";
-import { Image } from "expo-image";
+import { Platform, Pressable, ScrollView, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { TextWrapper } from "@/components/text-wrapper";
 import { SectionTitle } from "@/components/invoice-builder/shared";
@@ -18,6 +17,15 @@ import {
   invoiceTemplatePreviewStyles,
 } from "@/lib/invoice-templates";
 
+function toTitleCase(value: string): string {
+  if (!value) return "";
+  return value
+    .toLowerCase()
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 type Props = {
   draft: InvoiceDraft;
   onEdit: () => void;
@@ -26,308 +34,216 @@ type Props = {
 };
 
 function BrandedInvoicePreview({ draft }: { draft: InvoiceDraft }) {
-  const [logoLoading, setLogoLoading] = useState(false);
-  const styles = invoiceTemplatePreviewStyles("branded");
   const totals = calculateInvoiceTotals(draft);
   const signature = draft.signature_name.trim();
-  const brandMark = draft.brand_mark.trim();
   const invoiceNumber = draft.invoice_number.trim().replace(/^#/, "");
+  
   const clientLines = [
     draft.client_company,
-    draft.client_name,
+    toTitleCase(draft.client_name),
+    draft.client_email,
     draft.client_address,
     draft.client_vat_number ? `VAT: ${draft.client_vat_number}` : "",
-  ].filter((line) => line.trim().length > 0);
-  const metaRows = [
-    { label: "Due date", value: formatDraftDate(draft.due_date) },
-    { label: "Project", value: draft.project_name },
-    { label: "PO number", value: draft.purchase_order },
-    ...draft.custom_fields
-      .filter((field) => field.label.trim() && field.value.trim())
-      .map((field) => ({ label: field.label.trim(), value: field.value.trim() })),
-  ].filter((row) => row.value.trim().length > 0 && row.value !== "—");
+  ].filter((line) => line && line.trim().length > 0);
+
   const paymentLines = [
-    draft.payment_terms ? `Terms: ${draft.payment_terms}` : "",
-    draft.payment_method ? `Method: ${draft.payment_method}` : "",
-    draft.payment_reference ? `Reference: ${draft.payment_reference}` : "",
+    `Name: ${toTitleCase(draft.sender_name || "Thomo user")}`,
+    draft.sender_email,
+    draft.sender_phone,
+    draft.sender_address,
+    draft.sender_company_number ? `Co. Reg: ${draft.sender_company_number}` : "",
+    draft.sender_vat_number ? `VAT: ${draft.sender_vat_number}` : "",
     draft.payment_details,
-  ].filter((line) => line.trim().length > 0);
+  ].filter((line) => line && line.trim().length > 0);
 
   return (
     <View
       style={{
-        minHeight: 820,
+        aspectRatio: 1 / 1.414,
         borderRadius: INVOICE_RADIUS.surface,
-        backgroundColor: styles.cardBg,
+        backgroundColor: "#FFFFFF",
         borderWidth: 1,
-        borderColor: styles.borderColor,
-        paddingHorizontal: 30,
-        paddingTop: 28,
-        paddingBottom: 30,
+        borderColor: "#E7E7E7",
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 16,
       }}
     >
-      <View style={{ alignItems: "flex-end", minHeight: 24 }}>
-        {invoiceNumber ? (
-          <TextWrapper weight="medium" style={{ fontSize: 17, color: styles.headingColor }}>
-            #{invoiceNumber}
-          </TextWrapper>
-        ) : null}
-      </View>
-
-      <View style={{ alignItems: "center", marginTop: 12 }}>
-        {draft.brand_logo_url ? (
-          <View
-            style={{
-              width: 88,
-              height: 88,
-              borderRadius: INVOICE_RADIUS.surface,
-              overflow: "hidden",
-              marginBottom: 18,
-            }}
-          >
-            <Image
-              source={{ uri: draft.brand_logo_url }}
-              style={{ width: "100%", height: "100%", backgroundColor: "#FFFFFF" }}
-              contentFit="contain"
-              onLoadStart={() => setLogoLoading(true)}
-              onLoadEnd={() => setLogoLoading(false)}
-            />
-            {logoLoading ? (
-              <View
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  right: 0,
-                  bottom: 0,
-                  left: 0,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: "rgba(255,255,255,0.82)",
-                }}
-              >
-                <ActivityIndicator color={styles.headingColor} />
-              </View>
-            ) : null}
-          </View>
-        ) : brandMark ? (
-          <View
-            style={{
-              width: 88,
-              height: 88,
-              borderRadius: INVOICE_RADIUS.surface,
-              backgroundColor: styles.accent,
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 18,
-            }}
-          >
-            <TextWrapper weight="bold" style={{ color: "#FFFFFF", fontSize: 30 }}>
-              {brandMark.slice(0, 4)}
+      {/* Top Header: Invoice # (Right) */}
+      <View style={{ flexDirection: "row", justifyContent: "flex-end", marginBottom: 10 }}>
+        <View style={{ alignItems: "flex-end" }}>
+          {invoiceNumber ? (
+            <TextWrapper weight="medium" style={{ fontSize: 10, color: "#111111" }}>
+              #{invoiceNumber}
             </TextWrapper>
-          </View>
-        ) : null}
-
-        <TextWrapper weight="bold" style={{ fontSize: 42, color: styles.headingColor }}>
-          Invoice
-        </TextWrapper>
-        <TextWrapper
-          weight="regular"
-          style={{ fontSize: 18, color: styles.headingColor, marginTop: 18 }}
-        >
-          {formatDraftDate(draft.issue_date)}
-        </TextWrapper>
+          ) : null}
+        </View>
       </View>
 
-      <View style={{ marginTop: 58, maxWidth: "72%" }}>
-        <TextWrapper weight="bold" style={{ fontSize: 11, color: styles.headingColor }}>
-          BILLED TO:
-        </TextWrapper>
-        {(clientLines.length ? clientLines : ["Client name"]).map((line, index) => (
-          <TextWrapper
-            key={`${line}-${index}`}
-            weight={index === 0 ? "medium" : "regular"}
-            style={{
-              fontSize: 14,
-              color: styles.headingColor,
-              lineHeight: 20,
-              marginTop: index === 0 ? 10 : 2,
-            }}
-          >
-            {line}
+      {/* Main Header Row */}
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginTop: 20,
+        }}
+      >
+        <View style={{ flex: 1.2, minWidth: 0, marginTop: 10 }}>
+          <TextWrapper weight="medium" style={{ fontSize: 12, color: "#000000", marginBottom: 6 }}>
+            BILLED TO:
           </TextWrapper>
-        ))}
-      </View>
-
-      {metaRows.length ? (
-        <View
-          style={{
-            marginTop: 28,
-            borderTopWidth: 1,
-            borderTopColor: "#E7E7E7",
-            paddingTop: 14,
-            gap: 8,
-          }}
-        >
-          {metaRows.map((row) => (
-            <View
-              key={row.label}
-              style={{ flexDirection: "row", justifyContent: "space-between", gap: 18 }}
+          {(clientLines.length ? clientLines : ["Client Name"]).map((line, index) => (
+            <TextWrapper
+              key={`${line}-${index}`}
+              weight="regular"
+              style={{
+                fontSize: 10,
+                color: "#333333",
+                lineHeight: 14,
+                marginTop: index === 0 ? 0 : 2,
+              }}
             >
-              <TextWrapper weight="regular" style={{ fontSize: 12, color: "#737373" }}>
-                {row.label}
-              </TextWrapper>
-              <TextWrapper
-                weight="medium"
-                style={{ flex: 1, fontSize: 12, color: styles.headingColor, textAlign: "right" }}
-              >
-                {row.value}
-              </TextWrapper>
-            </View>
+              {line}
+            </TextWrapper>
           ))}
         </View>
-      ) : null}
 
-      <View style={{ marginTop: 46 }}>
-        <View style={{ height: 1.5, backgroundColor: styles.headingColor, marginBottom: 12 }} />
+        <View style={{ alignItems: "flex-end" }}>
+          <TextWrapper weight="bold" style={{ fontSize: 30, color: "#000000", lineHeight: 34 }}>
+            Invoice
+          </TextWrapper>
+          <TextWrapper weight="regular" style={{ fontSize: 10, color: "#111111", marginTop: 4 }}>
+            {formatDraftDate(draft.issue_date)}
+          </TextWrapper>
+        </View>
+      </View>
+
+      {/* Thin Horizontal Divider */}
+      <View style={{ height: 0.8, backgroundColor: "#EBEBEB", marginTop: 15, marginBottom: 10 }} />
+
+      {/* Table Header */}
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          paddingBottom: 12,
+        }}
+      >
+        <TextWrapper weight="bold" style={{ fontSize: 9, color: "#666666" }}>
+          ITEM
+        </TextWrapper>
+        <TextWrapper weight="bold" style={{ fontSize: 9, color: "#666666" }}>
+          TOTAL
+        </TextWrapper>
+      </View>
+      <View style={{ height: 1.2, backgroundColor: "#000000" }} />
+
+      {/* Line Items */}
+      {draft.line_items.map((item) => (
         <View
+          key={item.id}
           style={{
             flexDirection: "row",
             justifyContent: "space-between",
-            paddingHorizontal: 4,
-            paddingBottom: 10,
-            borderBottomWidth: 1,
-            borderBottomColor: "rgba(5,5,5,0.32)",
+            paddingVertical: 6,
+            borderBottomWidth: 0.8,
+            borderBottomColor: "#000000",
           }}
         >
-          <TextWrapper weight="regular" style={{ fontSize: 12, color: styles.headingColor }}>
-            Item
-          </TextWrapper>
-          <TextWrapper weight="regular" style={{ fontSize: 12, color: styles.headingColor }}>
-            Total
-          </TextWrapper>
-        </View>
-
-        {draft.line_items.map((item) => (
-          <View
-            key={item.id}
-            style={{
-              borderBottomWidth: 1,
-              borderBottomColor: styles.headingColor,
-              flexDirection: "row",
-              justifyContent: "space-between",
-              paddingVertical: 18,
-              paddingHorizontal: 4,
-            }}
-          >
-            <View style={{ flex: 1, paddingRight: 16 }}>
-              <TextWrapper
-                weight="medium"
-                style={{ fontSize: 14, color: styles.headingColor, lineHeight: 20 }}
-              >
-                {item.description || "Untitled item"}
-              </TextWrapper>
-              <TextWrapper
-                weight="regular"
-                style={{ fontSize: 11, color: "#737373", lineHeight: 16, marginTop: 3 }}
-              >
-                {item.quantity || "0"} x{" "}
-                {formatInvoiceAmount(parseDecimal(item.unit_price), draft.currency)}
-              </TextWrapper>
-            </View>
-            <TextWrapper weight="medium" style={{ fontSize: 14, color: styles.headingColor }}>
-              {formatInvoiceAmount(lineItemTotal(item), draft.currency)}
+          <View style={{ flex: 1, paddingRight: 20 }}>
+            <TextWrapper weight="regular" style={{ fontSize: 10, color: "#000000", lineHeight: 14 }}>
+              {item.description || "Service Description"}
             </TextWrapper>
           </View>
-        ))}
+          <TextWrapper weight="regular" style={{ fontSize: 10, color: "#000000" }}>
+            {formatInvoiceAmount(lineItemTotal(item), draft.currency)}
+          </TextWrapper>
+        </View>
+      ))}
 
-        <View style={{ alignItems: "flex-end", marginTop: 26 }}>
-          <View style={{ width: "50%", minWidth: 188 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
-              <TextWrapper weight="medium" style={{ fontSize: 15, color: styles.headingColor }}>
-                Due Now
-              </TextWrapper>
-              <TextWrapper weight="medium" style={{ fontSize: 15, color: styles.headingColor }}>
-                {formatInvoiceAmount(totals.total, draft.currency)}
-              </TextWrapper>
-            </View>
-            <View style={{ height: 1.5, backgroundColor: styles.headingColor, marginBottom: 16 }} />
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <TextWrapper weight="bold" style={{ fontSize: 20, color: styles.headingColor }}>
-                Total
-              </TextWrapper>
-              <TextWrapper weight="bold" style={{ fontSize: 20, color: styles.headingColor }}>
-                {formatInvoiceAmount(totals.total, draft.currency)}
-              </TextWrapper>
-            </View>
+      {/* Totals Section */}
+      <View style={{ alignItems: "flex-end", marginTop: 12 }}>
+        <View style={{ width: 120 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              paddingVertical: 4,
+            }}
+          >
+            <TextWrapper weight="regular" style={{ fontSize: 10, color: "#000000" }}>
+              Due Now
+            </TextWrapper>
+            <TextWrapper weight="regular" style={{ fontSize: 10, color: "#000000" }}>
+              {formatInvoiceAmount(totals.total, draft.currency)}
+            </TextWrapper>
+          </View>
+          <View style={{ height: 1, backgroundColor: "#000000", width: "100%" }} />
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              paddingVertical: 10,
+            }}
+          >
+            <TextWrapper weight="bold" style={{ fontSize: 16, color: "#000000" }}>
+              Total
+            </TextWrapper>
+            <TextWrapper weight="bold" style={{ fontSize: 16, color: "#000000" }}>
+              {formatInvoiceAmount(totals.total, draft.currency)}
+            </TextWrapper>
           </View>
         </View>
       </View>
 
-      <View style={{ flex: 1, minHeight: 72 }} />
+      {/* Footer Spacer */}
+      <View style={{ flex: 1, minHeight: 10 }} />
 
+      {/* Footer: Payment Info and Signature */}
       <View
         style={{
           flexDirection: "row",
           justifyContent: "space-between",
           alignItems: "flex-end",
-          gap: 18,
         }}
       >
-        <View style={{ flex: 1.35 }}>
-          {paymentLines.length ? (
-            <>
-              <TextWrapper weight="bold" style={{ fontSize: 14, color: styles.headingColor }}>
-                Payment Information
+        <View style={{ flex: 2 }}>
+          <TextWrapper weight="medium" style={{ fontSize: 12, color: "#000000", marginBottom: 6 }}>
+            Payment Information
+          </TextWrapper>
+          <View>
+            {paymentLines.map((line, i) => (
+              <TextWrapper key={i} weight="regular" style={{ fontSize: 9, color: "#444444", lineHeight: 12, marginBottom: 1 }}>
+                {line}
               </TextWrapper>
-              <TextWrapper
-                weight="regular"
-                style={{
-                  fontSize: 12.5,
-                  color: styles.headingColor,
-                  lineHeight: 18,
-                  marginTop: 8,
-                }}
-              >
-                {paymentLines.join("\n")}
-              </TextWrapper>
-            </>
-          ) : null}
+            ))}
+          </View>
         </View>
 
         {signature ? (
           <View style={{ alignItems: "flex-end", flex: 1 }}>
             <TextWrapper
               weight="regular"
+              numberOfLines={1}
               style={{
-                fontSize: 16,
-                color: styles.headingColor,
+                fontSize: 14,
+                color: "#111111",
                 fontFamily: Platform.OS === "ios" ? "Snell Roundhand" : "serif",
-                marginBottom: -4,
+                marginBottom: -2,
               }}
             >
               {signature.toLowerCase().replace(/\s+/g, "")}
             </TextWrapper>
-            <TextWrapper
-              weight="bold"
-              style={{ fontSize: 15, color: styles.headingColor, textAlign: "right" }}
-            >
-              {signature}
+            <TextWrapper weight="medium" style={{ fontSize: 12, color: "#000000" }}>
+              {toTitleCase(signature)}
             </TextWrapper>
           </View>
         ) : null}
       </View>
-
-      {draft.notes.trim() ? (
-        <View style={{ marginTop: 26, borderTopWidth: 1, borderTopColor: "#E7E7E7", paddingTop: 14 }}>
-          <TextWrapper weight="regular" style={{ fontSize: 12, lineHeight: 18, color: "#525252" }}>
-            {draft.notes.trim()}
-          </TextWrapper>
-        </View>
-      ) : null}
     </View>
   );
 }
-
 
 export function PreviewStep({ draft, onEdit, onCreate, saving }: Props) {
   const meta = invoiceTemplateMeta(draft.template);
