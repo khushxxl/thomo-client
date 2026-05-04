@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router, Stack } from "expo-router";
+import { router, Stack, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
@@ -56,6 +56,7 @@ type Message = {
   text: string;
   isUser: boolean;
   isTyping?: boolean;
+  animate?: boolean;
 };
 
 type HistoryGroup = {
@@ -78,6 +79,12 @@ const chatMemory: Record<string, ChatSnapshot> = {};
 
 function chatCacheKey(userId: string | null): string {
   return `thomo:chat:${userId ?? "guest"}:v1`;
+}
+
+function stripTransientMessageState(messages: Message[]): Message[] {
+  return messages
+    .filter((message) => !message.isTyping)
+    .map(({ animate, isTyping, ...message }) => message);
 }
 
 function groupConversations(conversations: Conversation[]): HistoryGroup[] {
@@ -264,6 +271,8 @@ const ChatMessageBubble = memo(function ChatMessageBubble({ msg }: { msg: Messag
   return (
     <ThomoAiBubble
       text={msg.text}
+      isTyping={msg.isTyping}
+      animateText={msg.animate === true}
     />
   );
 });
@@ -345,9 +354,9 @@ export default function ThomoChatScreen() {
 
     if (memory) {
       setConversations(memory.conversations);
-      setActiveConversationId(memory.activeConversationId);
-      setMessages(memory.messages);
-      setInputText(memory.inputText);
+      setActiveConversationId(null);
+      setMessages([]);
+      setInputText("");
       setMessageCache(memory.messageCache);
       setChatHydrated(true);
       return () => {
@@ -359,11 +368,16 @@ export default function ThomoChatScreen() {
     readPersistentCache<ChatSnapshot>(cacheKey, CHAT_CACHE_TTL_MS).then((snapshot) => {
       if (!mounted) return;
       if (snapshot) {
-        chatMemory[cacheKey] = snapshot;
+        chatMemory[cacheKey] = {
+          ...snapshot,
+          activeConversationId: null,
+          messages: [],
+          inputText: "",
+        };
         setConversations(snapshot.conversations);
-        setActiveConversationId(snapshot.activeConversationId);
-        setMessages(snapshot.messages);
-        setInputText(snapshot.inputText);
+        setActiveConversationId(null);
+        setMessages([]);
+        setInputText("");
         setMessageCache(snapshot.messageCache ?? {});
       }
       setChatHydrated(true);
@@ -390,9 +404,9 @@ export default function ThomoChatScreen() {
         setConversations(data);
         chatMemory[cacheKey] = {
           conversations: data,
-          activeConversationId: currentSnapshot?.activeConversationId ?? null,
-          messages: currentSnapshot?.messages ?? [],
-          inputText: currentSnapshot?.inputText ?? "",
+          activeConversationId: null,
+          messages: [],
+          inputText: "",
           messageCache: currentSnapshot?.messageCache ?? {},
           fetchedAt: Date.now(),
         };
@@ -415,9 +429,9 @@ export default function ThomoChatScreen() {
 
     const snapshot: ChatSnapshot = {
       conversations,
-      activeConversationId,
-      messages: messages.filter((message) => !message.isTyping),
-      inputText,
+      activeConversationId: null,
+      messages: [],
+      inputText: "",
       messageCache,
       fetchedAt: chatMemory[cacheKey]?.fetchedAt ?? 0,
     };
@@ -428,7 +442,15 @@ export default function ThomoChatScreen() {
     }, 250);
 
     return () => clearTimeout(timeout);
-  }, [activeConversationId, cacheKey, chatHydrated, conversations, inputText, messageCache, messages]);
+  }, [cacheKey, chatHydrated, conversations, messageCache]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setActiveConversationId(null);
+      setMessages([]);
+      setInputText("");
+    }, []),
+  );
 
   useEffect(() => {
     if (!sidebarMounted) {
@@ -500,7 +522,7 @@ export default function ThomoChatScreen() {
     setActiveConversationId(convId);
     const cachedMessages = messageCache[convId];
     if (cachedMessages?.length) {
-      setMessages(cachedMessages);
+      setMessages(stripTransientMessageState(cachedMessages));
       return;
     }
 
@@ -512,7 +534,10 @@ export default function ThomoChatScreen() {
         isUser: message.role === "user",
       }));
       setMessages(nextMessages);
-      setMessageCache((current) => ({ ...current, [convId]: nextMessages }));
+      setMessageCache((current) => ({
+        ...current,
+        [convId]: stripTransientMessageState(nextMessages),
+      }));
     } catch (err) {
       console.error("Failed to load messages:", err);
       setMessages([
@@ -569,12 +594,12 @@ export default function ThomoChatScreen() {
       setMessages((prev) => {
         const nextMessages = prev.map((message) =>
           message.id === typingId
-            ? { id: reply.id, text: reply.content, isUser: false }
+            ? { id: reply.id, text: reply.content, isUser: false, animate: true }
             : message,
         );
         setMessageCache((current) => ({
           ...current,
-          [convId as string]: nextMessages.filter((message) => !message.isTyping),
+          [convId as string]: stripTransientMessageState(nextMessages),
         }));
         return nextMessages;
       });

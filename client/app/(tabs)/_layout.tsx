@@ -1,5 +1,5 @@
-import { Tabs } from "expo-router";
-import React from "react";
+import { router, Tabs } from "expo-router";
+import React, { useEffect } from "react";
 
 import { HapticTab } from "@/components/haptic-tab";
 import {
@@ -10,10 +10,22 @@ import {
   ProfileIcon,
 } from "@/components/icons/tab-icons";
 import { useThomo } from "@/lib/thomo-context";
+import { useAuth } from "@/lib/auth-context";
 
 export default function TabLayout() {
   const { connected } = useThomo();
+  const { user, loading: authLoading } = useAuth();
   const hideTabs = connected !== true;
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace("/welcome");
+    }
+  }, [authLoading, user]);
+
+  if (authLoading || !user) {
+    return null;
+  }
 
   return (
     <Tabs

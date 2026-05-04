@@ -23,6 +23,7 @@ import { calculateVatLiability, type VatBreakdown } from "@/lib/vat";
 
 type ThomoState = {
   connected: boolean | null;
+  statusLoading: boolean;
 
   balance: ApiBalance | null;
   transactions: ApiTransaction[];
@@ -42,9 +43,11 @@ type ThomoState = {
 const ThomoContext = createContext<ThomoState | null>(null);
 
 export function ThomoProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const userId = user?.id ?? null;
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [statusUserId, setStatusUserId] = useState<string | null>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
   const [balance, setBalance] = useState<ApiBalance | null>(null);
   const [transactions, setTransactions] = useState<ApiTransaction[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -90,9 +93,11 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
 
   const loadAll = useCallback(async () => {
     setError(null);
+    setStatusLoading(true);
     try {
       const { connected: isConnected } = await fetchStatus();
       setConnected(isConnected);
+      setStatusUserId(userId);
 
       if (isConnected) {
         await Promise.all([loadBalance(), loadTransactions(), loadProfile()]);
@@ -103,14 +108,15 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       console.error("ThomoContext load failed:", err);
-      setConnected(false);
+      setConnected(null);
+      setStatusUserId(null);
       setBalance(null);
       setTransactions([]);
       setError(getErrorMessage(err, "Could not load your bank data."));
+    } finally {
+      setStatusLoading(false);
     }
-  }, [loadBalance, loadTransactions, loadProfile]);
-
-  const authLoading = useAuth().loading;
+  }, [loadBalance, loadTransactions, loadProfile, userId]);
 
   // Re-fetch when the authenticated user changes (sign-in, sign-out, switch)
   useEffect(() => {
@@ -118,7 +124,9 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
 
     if (!userId) {
       // Definitively signed out — clear everything
-      setConnected(false);
+      setConnected(null);
+      setStatusUserId(null);
+      setStatusLoading(false);
       setBalance(null);
       setTransactions([]);
       setProfile(null);
@@ -130,9 +138,11 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
+    setStatusLoading(true);
     try {
       const { connected: isConnected } = await fetchStatus();
       setConnected(isConnected);
+      setStatusUserId(userId);
       if (isConnected) {
         await Promise.all([loadBalance(), loadTransactions(), loadProfile()]);
       } else {
@@ -142,28 +152,34 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       console.error("Refresh failed:", err);
-      setConnected(false);
+      setConnected(null);
+      setStatusUserId(null);
       setBalance(null);
       setTransactions([]);
       setError(getErrorMessage(err, "Could not refresh your bank data."));
     } finally {
+      setStatusLoading(false);
       setRefreshing(false);
     }
-  }, [loadBalance, loadTransactions, loadProfile]);
+  }, [loadBalance, loadTransactions, loadProfile, userId]);
 
   const markConnected = useCallback(async () => {
     setConnected(true);
+    setStatusUserId(userId);
     loadBalance();
     loadTransactions();
-  }, [loadBalance, loadTransactions]);
+  }, [loadBalance, loadTransactions, userId]);
 
   const disconnect = useCallback(async () => {
     await apiDisconnect();
     setConnected(false);
+    setStatusUserId(userId);
     setBalance(null);
     setTransactions([]);
     setError(null);
-  }, []);
+  }, [userId]);
+
+  const effectiveConnected = statusUserId === userId ? connected : null;
 
   const vat = useMemo(
     () =>
@@ -173,7 +189,8 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ThomoState>(
     () => ({
-      connected,
+      connected: effectiveConnected,
+      statusLoading,
       balance,
       transactions,
       profile,
@@ -187,7 +204,8 @@ export function ThomoProvider({ children }: { children: ReactNode }) {
       disconnect,
     }),
     [
-      connected,
+      effectiveConnected,
+      statusLoading,
       balance,
       transactions,
       profile,

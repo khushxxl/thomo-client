@@ -140,6 +140,7 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const {
     connected,
+    statusLoading,
     balance,
     vat,
     transactions,
@@ -171,6 +172,9 @@ export default function DashboardScreen() {
 
   // Auto-open the connect sheet whenever the user is unconnected.
   useEffect(() => {
+    if (statusLoading || connected === null) {
+      return;
+    }
     if (connected === false) {
       const timer = setTimeout(() => sheetRef.current?.open(), 250);
       return () => clearTimeout(timer);
@@ -178,7 +182,7 @@ export default function DashboardScreen() {
     if (connected === true) {
       sheetRef.current?.close();
     }
-  }, [connected]);
+  }, [connected, statusLoading]);
 
   useEffect(() => {
     if (connected === true) {

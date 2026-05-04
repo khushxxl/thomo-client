@@ -171,7 +171,12 @@ export default function WelcomeScreen() {
           <Pressable3D
             className="flex-row items-center justify-center rounded-2xl bg-[#1A1A1A] py-5"
             shadowColor="#000"
-            onPress={() => router.push("/(tabs)/dashboard")}
+            onPress={() => {
+              Alert.alert(
+                "Apple sign in isn't ready yet",
+                "Please continue with Google for now.",
+              );
+            }}
           >
             <AppleIcon size={20} color="#fff" />
             <TextWrapper

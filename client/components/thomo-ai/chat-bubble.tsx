@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { View, StyleSheet } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, Easing, View, StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import { TextWrapper } from "@/components/text-wrapper";
 import { ChatTriangleIcon } from "@/components/icons";
@@ -8,17 +8,87 @@ interface ThomoAiBubbleProps {
   text: string;
   loadingText?: string;
   showAvatar?: boolean;
+  isTyping?: boolean;
+  animateText?: boolean;
 }
 
-export function ThomoAiBubble({ text, loadingText, showAvatar = true }: ThomoAiBubbleProps) {
-  const [displayedText, setDisplayedText] = useState("");
+function TypingDots() {
+  const dotOne = useRef(new Animated.Value(0.35)).current;
+  const dotTwo = useRef(new Animated.Value(0.35)).current;
+  const dotThree = useRef(new Animated.Value(0.35)).current;
 
   useEffect(() => {
+    const createPulse = (value: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(value, {
+            toValue: 1,
+            duration: 320,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0.35,
+            duration: 320,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.delay(360 - delay),
+        ]),
+      );
+
+    const animation = Animated.parallel([
+      createPulse(dotOne, 0),
+      createPulse(dotTwo, 120),
+      createPulse(dotThree, 240),
+    ]);
+
+    animation.start();
+    return () => animation.stop();
+  }, [dotOne, dotThree, dotTwo]);
+
+  return (
+    <View style={styles.typingRow}>
+      <TextWrapper weight="medium" style={styles.typingText}>
+        Typing
+      </TextWrapper>
+      <View style={styles.dotsRow}>
+        {[dotOne, dotTwo, dotThree].map((opacity, index) => (
+          <Animated.View key={index} style={[styles.dot, { opacity }]} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+export function ThomoAiBubble({
+  text,
+  loadingText,
+  showAvatar = true,
+  isTyping = false,
+  animateText = false,
+}: ThomoAiBubbleProps) {
+  const [displayedText, setDisplayedText] = useState("");
+  const showTyping = isTyping || text.trim().length === 0;
+
+  useEffect(() => {
+    if (showTyping) {
+      setDisplayedText("");
+      return;
+    }
+
+    if (!animateText) {
+      setDisplayedText(text);
+      return;
+    }
+
     setDisplayedText("");
     let index = 0;
     const interval = setInterval(() => {
       if (index < text.length) {
-        setDisplayedText((prev) => prev + text.charAt(index));
+        const nextCharacter = text.charAt(index);
+        setDisplayedText((prev) => prev + nextCharacter);
         index++;
       } else {
         clearInterval(interval);
@@ -26,7 +96,7 @@ export function ThomoAiBubble({ text, loadingText, showAvatar = true }: ThomoAiB
     }, 25);
 
     return () => clearInterval(interval);
-  }, [text]);
+  }, [animateText, showTyping, text]);
 
   return (
     <View style={styles.container}>
@@ -34,19 +104,23 @@ export function ThomoAiBubble({ text, loadingText, showAvatar = true }: ThomoAiB
         <View style={styles.avatarContainer}>
           <Image
             source={require("../../assets/images/logo.png")}
-            style={{ width: 32, height: 32, borderRadius: 8 }}
+            style={{ width: 32, height: 32, borderRadius: 16 }}
             contentFit="contain"
           />
         </View>
       )}
       
       <View style={styles.bubbleWrapper}>
-        <View style={styles.bubble}>
-          <TextWrapper weight="medium" style={styles.text}>
-            {displayedText}
-          </TextWrapper>
+        <View style={[styles.bubble, showTyping && styles.typingBubble]}>
+          {showTyping ? (
+            <TypingDots />
+          ) : (
+            <TextWrapper weight="medium" style={styles.text}>
+              {displayedText}
+            </TextWrapper>
+          )}
           
-          {loadingText && (
+          {!showTyping && loadingText && (
             <TextWrapper 
               weight="regular" 
               style={[
@@ -60,7 +134,7 @@ export function ThomoAiBubble({ text, loadingText, showAvatar = true }: ThomoAiB
         </View>
         
         <View style={styles.triangleContainer}>
-          <ChatTriangleIcon size={40} />
+          <ChatTriangleIcon size={18} />
         </View>
       </View>
     </View>
@@ -79,11 +153,13 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   bubbleWrapper: {
-    flex: 1,
+    flexShrink: 1,
     position: "relative",
     marginBottom: 20,
+    maxWidth: "100%",
   },
   bubble: {
+    alignSelf: "flex-start",
     backgroundColor: "#1F1F1F",
     borderRadius: 18,
     paddingHorizontal: 20,
@@ -93,9 +169,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 10,
   },
+  typingBubble: {
+    borderRadius: 18,
+    minWidth: 88,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+  },
   text: {
     fontSize: 16,
-    color: "#FFFFFF",
+    color: "#FFFFFFB2",
     lineHeight: 24,
   },
   loadingText: {
@@ -108,5 +190,26 @@ const styles = StyleSheet.create({
     bottom: -10,
     left: 10,
     zIndex: -1,
+  },
+  typingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  typingText: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    lineHeight: 18,
+  },
+  dotsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  dot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: "#FFFFFF",
   },
 });
