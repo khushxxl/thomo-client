@@ -11,7 +11,7 @@
     "owner": "thomoorg",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.thomoai.client",
+      "bundleIdentifier": "com.yourthomoai.app",
       "appleTeamId": "RP423FWHCR",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -26,7 +26,11 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.thomoai.client"
+      "package": "com.thomoai.client",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -70,6 +74,12 @@
       "eas": {
         "projectId": "d51de5f8-bf83-43cf-baf0-791975128800"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d51de5f8-bf83-43cf-baf0-791975128800"
     }
   }
 }
