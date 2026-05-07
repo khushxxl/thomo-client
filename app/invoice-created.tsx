@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, View, Alert } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect } from "@react-navigation/native";
@@ -90,13 +90,12 @@ export default function InvoiceCreatedScreen() {
   const handleOpenEmailDraft = async () => {
     if (!invoice || !details) return;
     setActionLoading("open-email");
-    setError(null);
     try {
       await openInvoiceEmailDraft(invoice, details.draft);
       setPreparedEmail(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (err) {
-      setError(getErrorMessage(err, "Could not open email composer."));
+      Alert.alert("Email Unavailable", getErrorMessage(err, "Could not open email composer."));
     } finally {
       setActionLoading(null);
     }
@@ -105,7 +104,6 @@ export default function InvoiceCreatedScreen() {
   const handleConfirmSent = async () => {
     if (!invoice) return;
     setActionLoading("confirm-sent");
-    setError(null);
     try {
       const updated = await sendInvoice(invoice.id);
       setInvoice(updated);
@@ -118,7 +116,7 @@ export default function InvoiceCreatedScreen() {
         },
       });
     } catch (err) {
-      setError(getErrorMessage(err, "Could not mark this invoice as sent."));
+      Alert.alert("Update Failed", getErrorMessage(err, "Could not mark this invoice as sent."));
     } finally {
       setActionLoading(null);
     }
@@ -127,12 +125,11 @@ export default function InvoiceCreatedScreen() {
   const handleDownloadPdf = async () => {
     if (!invoice || !details) return;
     setActionLoading("pdf");
-    setError(null);
     try {
       await shareInvoicePdf(invoice, details.draft);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (err) {
-      setError(getErrorMessage(err, "Could not prepare the invoice PDF."));
+      Alert.alert("PDF Error", getErrorMessage(err, "Could not prepare the invoice PDF."));
     } finally {
       setActionLoading(null);
     }
