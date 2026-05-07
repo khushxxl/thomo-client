@@ -1,4 +1,4 @@
-import { apiJson } from "@/lib/api";
+import { ApiError, apiJson } from "@/lib/api";
 import { formatCurrency } from "@/lib/money";
 
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "cancelled" | "pending";
@@ -75,15 +75,37 @@ export async function updateInvoice(
 }
 
 export async function sendInvoice(id: string): Promise<Invoice> {
-  return apiJson<Invoice>(`/invoices/${id}/send`, {
-    method: "POST",
-  });
+  try {
+    return await apiJson<Invoice>(`/invoices/${id}/send`, {
+      method: "POST",
+    });
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 405)) {
+      return updateInvoice(id, {
+        status: "sent",
+        sent_at: new Date().toISOString(),
+      });
+    }
+    throw err;
+  }
 }
 
 export async function markInvoicePaid(id: string): Promise<Invoice> {
-  return apiJson<Invoice>(`/invoices/${id}/mark-paid`, {
-    method: "POST",
-  });
+  try {
+    return await apiJson<Invoice>(`/invoices/${id}/mark-paid`, {
+      method: "POST",
+    });
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 405)) {
+      const now = new Date().toISOString();
+      return updateInvoice(id, {
+        status: "paid",
+        sent_at: now,
+        paid_at: now,
+      });
+    }
+    throw err;
+  }
 }
 
 export async function deleteInvoice(id: string): Promise<void> {
@@ -97,12 +119,18 @@ export function formatInvoiceAmount(
   return formatCurrency(amount, currency, { decimals: true });
 }
 
+function parseInvoiceDate(value: string): Date {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return new Date(value);
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
 export function invoiceDueText(invoice: Invoice): string | null {
   if (!invoice.due_date) return null;
   if (invoice.status === "paid") return null;
 
   const now = new Date();
-  const due = new Date(invoice.due_date);
+  const due = parseInvoiceDate(invoice.due_date);
   const diffMs = due.getTime() - now.getTime();
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 

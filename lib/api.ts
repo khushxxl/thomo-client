@@ -66,6 +66,10 @@ async function getAccessToken(): Promise<string> {
 async function readErrorMessage(res: Response): Promise<string> {
   try {
     const text = await res.text();
+    if (/^\s*<!doctype html/i.test(text) || /^\s*<html/i.test(text)) {
+      const preMatch = text.match(/<pre>([\s\S]*?)<\/pre>/i);
+      return preMatch?.[1]?.replace(/<[^>]*>/g, "").trim() || `Request failed with ${res.status}`;
+    }
     try {
       const data = JSON.parse(text) as { error?: string; message?: string };
       return data.error || data.message || `Request failed with ${res.status}`;

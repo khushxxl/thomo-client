@@ -64,7 +64,20 @@ function makeId(prefix: string): string {
 function isoDate(offsetDays = 0): string {
   const date = new Date();
   date.setDate(date.getDate() + offsetDays);
-  return date.toISOString().slice(0, 10);
+  return formatDateInputValue(date);
+}
+
+export function formatDateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function parseDateInputValue(value: string): Date {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return new Date(value);
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 }
 
 export function createEmptyInvoiceDraft(seed?: Partial<InvoiceDraft>): InvoiceDraft {
@@ -155,6 +168,41 @@ export function serializeInvoiceDraft(draft: InvoiceDraft): string {
   return `${NOTE_PREFIX}${JSON.stringify(draft)}`;
 }
 
+function lineItemHasValue(item: InvoiceLineItemDraft): boolean {
+  return (
+    item.description.trim().length > 0 ||
+    item.unit_price.trim().length > 0
+  );
+}
+
+function normalizeInvoiceDraftForSave(draft: InvoiceDraft): InvoiceDraft {
+  const lineItems = draft.line_items
+    .filter(lineItemHasValue)
+    .map((item) => ({
+      ...item,
+      description: item.description.trim(),
+      quantity: item.quantity.trim() || "1",
+      unit_price: item.unit_price.trim(),
+    }));
+
+  const customFields = draft.custom_fields
+    .filter((field) => field.label.trim().length > 0 || field.value.trim().length > 0)
+    .map((field) => ({
+      ...field,
+      label: field.label.trim(),
+      value: field.value.trim(),
+    }));
+
+  return {
+    ...draft,
+    invoice_number: draft.invoice_number.trim(),
+    sender_name: draft.sender_name.trim(),
+    client_name: draft.client_name.trim(),
+    line_items: lineItems.length ? lineItems : draft.line_items,
+    custom_fields: customFields,
+  };
+}
+
 function fallbackDraftFromInvoice(invoice: Invoice): InvoiceDraft {
   return createEmptyInvoiceDraft({
     client_name: invoice.client_name,
@@ -193,14 +241,15 @@ export function parseInvoiceDraftFromNotes(invoice: Invoice): InvoiceDraft {
 }
 
 export function buildInvoiceCreateInput(draft: InvoiceDraft): CreateInvoiceInput {
-  const totals = calculateInvoiceTotals(draft);
+  const normalizedDraft = normalizeInvoiceDraftForSave(draft);
+  const totals = calculateInvoiceTotals(normalizedDraft);
   return {
-    client_name: draft.client_name.trim(),
+    client_name: normalizedDraft.client_name,
     amount: totals.total,
-    currency: draft.currency,
-    status: draft.status,
-    due_date: draft.due_date || undefined,
-    notes: serializeInvoiceDraft(draft),
+    currency: normalizedDraft.currency,
+    status: normalizedDraft.status,
+    due_date: normalizedDraft.due_date || undefined,
+    notes: serializeInvoiceDraft(normalizedDraft),
   };
 }
 
@@ -216,7 +265,7 @@ export function invoiceStatusLabel(status: Invoice["status"]): string {
 
 export function formatDraftDate(value: string): string {
   if (!value) return "—";
-  const date = new Date(value);
+  const date = parseDateInputValue(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString(undefined, {
     month: "short",

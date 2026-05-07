@@ -21,7 +21,9 @@ import {
   calculateInvoiceTotals,
   createCustomField,
   createLineItem,
+  formatDateInputValue,
   formatDraftDate,
+  parseDateInputValue,
   type InvoiceDraft,
   type InvoiceLineItemDraft,
 } from "@/lib/invoice-draft";
@@ -139,13 +141,13 @@ export function FormStep({
 
   const openDateField = (field: Exclude<DateFieldKey, null>) => {
     const raw = field === "issue_date" ? draft.issue_date : draft.due_date;
-    const parsed = raw ? new Date(raw) : new Date();
+    const parsed = raw ? parseDateInputValue(raw) : new Date();
     setIosPickerValue(Number.isNaN(parsed.getTime()) ? new Date() : parsed);
     setActiveDateField(field);
   };
 
   const commitDate = (field: Exclude<DateFieldKey, null>, date: Date) => {
-    const formatted = date.toISOString().slice(0, 10);
+    const formatted = formatDateInputValue(date);
     setDraft({ ...draft, [field]: formatted });
   };
 
@@ -672,6 +674,7 @@ export function FormStep({
                     }
                     placeholder="1"
                     keyboardType="decimal-pad"
+                    error={showValidation ? visibleLineErrors[item.id]?.quantity : undefined}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -1006,7 +1009,7 @@ export function FormStep({
 
       {activeDateField && Platform.OS === "android" ? (
         <DateTimePicker
-          value={draft[activeDateField] ? new Date(draft[activeDateField]) : new Date()}
+          value={draft[activeDateField] ? parseDateInputValue(draft[activeDateField]) : new Date()}
           mode="date"
           display="calendar"
           onChange={handleDateChange}

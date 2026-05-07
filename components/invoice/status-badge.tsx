@@ -1,6 +1,6 @@
 import { View } from "react-native";
 import { TextWrapper } from "@/components/text-wrapper";
-import { INVOICE_RADIUS, INVOICE_STATUS_THEME } from "@/lib/invoice-ui";
+import { INVOICE_STATUS_THEME } from "@/lib/invoice-ui";
 import type { InvoiceStatus } from "@/lib/invoices";
 import { invoiceStatusLabel } from "@/lib/invoice-draft";
 

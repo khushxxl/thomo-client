@@ -1,4 +1,4 @@
-import { parseDecimal, type InvoiceDraft } from "@/lib/invoice-draft";
+import { parseDateInputValue, parseDecimal, type InvoiceDraft } from "@/lib/invoice-draft";
 
 export type InvoiceFieldErrorMap = {
   invoice_number?: string;
@@ -10,6 +10,7 @@ export type InvoiceFieldErrorMap = {
     string,
     {
       description?: string;
+      quantity?: string;
       unit_price?: string;
     }
   >;
@@ -42,19 +43,24 @@ export function validateInvoiceDraft(draft: InvoiceDraft): InvoiceValidationResu
     fields.due_date = "Due date is required.";
   } else if (
       draft.issue_date.trim() &&
-      new Date(draft.due_date).getTime() < new Date(draft.issue_date).getTime()
+      parseDateInputValue(draft.due_date).getTime() < parseDateInputValue(draft.issue_date).getTime()
     ) {
       fields.due_date = "Due date must be after the issue date.";
     }
 
   const hasCompletedLineItem = draft.line_items.some(
-    (item) => item.description.trim().length > 0 && parseDecimal(item.unit_price) > 0,
+    (item) =>
+      item.description.trim().length > 0 &&
+      parseDecimal(item.quantity) > 0 &&
+      parseDecimal(item.unit_price) > 0,
   );
 
   draft.line_items.forEach((item, index) => {
-    const itemErrors: { description?: string; unit_price?: string } = {};
+    const itemErrors: { description?: string; quantity?: string; unit_price?: string } = {};
     const hasStartedItem =
-      item.description.trim().length > 0 || item.unit_price.trim().length > 0;
+      item.description.trim().length > 0 ||
+      item.quantity.trim().length > 0 ||
+      item.unit_price.trim().length > 0;
     const shouldValidateItem = hasStartedItem || (!hasCompletedLineItem && index === 0);
 
     if (!shouldValidateItem) {
@@ -63,6 +69,9 @@ export function validateInvoiceDraft(draft: InvoiceDraft): InvoiceValidationResu
 
     if (!item.description.trim()) {
       itemErrors.description = "Add a description.";
+    }
+    if (!(parseDecimal(item.quantity) > 0)) {
+      itemErrors.quantity = "Enter a quantity greater than zero.";
     }
     if (!(parseDecimal(item.unit_price) > 0)) {
       itemErrors.unit_price = "Enter an amount greater than zero.";

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Linking, Pressable, ScrollView, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect } from "@react-navigation/native";
@@ -9,7 +9,7 @@ import { TextWrapper } from "@/components/text-wrapper";
 import { ChevronLeftIcon } from "@/components/icons/chevron-left-icon";
 import { InvoiceStatusBadge } from "@/components/invoice/status-badge";
 import { getErrorMessage } from "@/lib/api";
-import { buildInvoiceEmail, buildMailtoUrl } from "@/lib/invoice-email";
+import { openInvoiceEmailDraft } from "@/lib/invoice-email";
 import { shareInvoicePdf } from "@/lib/invoice-pdf";
 import { INVOICE_RADIUS } from "@/lib/invoice-ui";
 import {
@@ -92,12 +92,7 @@ export default function InvoiceCreatedScreen() {
     setActionLoading("open-email");
     setError(null);
     try {
-      const mailto = buildMailtoUrl(buildInvoiceEmail(invoice, details.draft));
-      const supported = await Linking.canOpenURL(mailto);
-      if (!supported) {
-        throw new Error("No mail app is available on this device.");
-      }
-      await Linking.openURL(mailto);
+      await openInvoiceEmailDraft(invoice, details.draft);
       setPreparedEmail(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (err) {

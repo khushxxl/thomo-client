@@ -1,21 +1,22 @@
 import React, { forwardRef, useMemo, useState } from "react";
-import { Pressable, View, StyleSheet } from "react-native";
+import { Pressable, View } from "react-native";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView } from "@gorhom/bottom-sheet";
 import { TextWrapper } from "@/components/text-wrapper";
-import { DocIcon, ManualIcon, ThomoSmallIcon } from "@/components/icons";
+import { ManualIcon, ThomoSmallIcon } from "@/components/icons";
 
 type CreateOption = "thomo" | "manual";
 
-export const CreateInvoiceSheet = forwardRef<BottomSheetModal>((props, ref) => {
+export const CreateInvoiceSheet = forwardRef<BottomSheetModal>((_props, ref) => {
   const [selected, setSelected] = useState<CreateOption>("thomo");
   const snapPoints = useMemo(() => ["42%"], []);
 
   const handleContinue = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    // @ts-ignore
-    ref.current?.dismiss();
+    if (typeof ref !== "function") {
+      ref?.current?.dismiss();
+    }
     if (selected === "thomo") {
       router.push("/thomo-invoice-chat");
     } else {
@@ -151,3 +152,5 @@ export const CreateInvoiceSheet = forwardRef<BottomSheetModal>((props, ref) => {
     </BottomSheetModal>
   );
 });
+
+CreateInvoiceSheet.displayName = "CreateInvoiceSheet";
