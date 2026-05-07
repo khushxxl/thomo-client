@@ -2,7 +2,6 @@ import { formatDraftDate, lineItemTotal, type InvoiceDraft } from "@/lib/invoice
 import { createInvoicePdf } from "@/lib/invoice-pdf";
 import { formatInvoiceAmount, type Invoice } from "@/lib/invoices";
 import * as MailComposer from "expo-mail-composer";
-import { Linking } from "react-native";
 
 export function buildInvoiceEmail(invoice: Invoice, draft: InvoiceDraft): {
   to: string;

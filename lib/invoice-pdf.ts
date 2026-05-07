@@ -1,5 +1,6 @@
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system/legacy";
 import { formatDraftDate, lineItemTotal, parseDecimal, type InvoiceDraft } from "@/lib/invoice-draft";
 import { formatInvoiceAmount, type Invoice } from "@/lib/invoices";
 
@@ -20,6 +21,16 @@ function toTitleCase(value: string): string {
     .split(" ")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+function safePdfFileName(value: string): string {
+  const cleaned = value
+    .trim()
+    .replace(/^#/, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `Invoice-${cleaned || "draft"}.pdf`;
 }
 
 /**
@@ -375,7 +386,18 @@ export async function createInvoicePdf(invoice: Invoice, draft: InvoiceDraft): P
     html: buildInvoiceHtml(invoice, draft),
     base64: false,
   });
-  return uri;
+
+  if (!FileSystem.cacheDirectory) {
+    return uri;
+  }
+
+  const fileName = safePdfFileName(draft.invoice_number || invoice.id);
+  const pdfUri = `${FileSystem.cacheDirectory}${fileName}`;
+
+  await FileSystem.deleteAsync(pdfUri, { idempotent: true });
+  await FileSystem.copyAsync({ from: uri, to: pdfUri });
+
+  return pdfUri;
 }
 
 export async function shareInvoicePdf(invoice: Invoice, draft: InvoiceDraft): Promise<void> {
