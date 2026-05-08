@@ -2,17 +2,17 @@ name: Staging → TestFlight
 
 on:
   push:
-    branches: ['staging']
+    branches: ["staging"]
 
 jobs:
   build_ios:
     type: build
     params:
       platform: ios
-      profile: staging
+      profile: production
   submit_ios:
     needs: [build_ios]
     type: submit
     params:
       build_id: ${{ needs.build_ios.outputs.build_id }}
-      profile: staging
+      profile: production
