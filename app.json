@@ -4,13 +4,14 @@
     "slug": "thomoaiapp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/white-icon.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "thomoai",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "owner": "thomoorg",
     "ios": {
       "supportsTablet": true,
+      "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.thomoai.client",
       "appleTeamId": "RP423FWHCR",
       "infoPlist": {
@@ -19,7 +20,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -37,8 +38,8 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/white-icon.png",
-          "imageWidth": 60,
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 96,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
