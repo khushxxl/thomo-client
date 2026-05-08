@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Linking, Pressable, ScrollView, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, View, Alert } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect } from "@react-navigation/native";
@@ -9,7 +9,7 @@ import { TextWrapper } from "@/components/text-wrapper";
 import { ChevronLeftIcon } from "@/components/icons/chevron-left-icon";
 import { InvoiceStatusBadge } from "@/components/invoice/status-badge";
 import { getErrorMessage } from "@/lib/api";
-import { buildInvoiceEmail, buildMailtoUrl } from "@/lib/invoice-email";
+import { openInvoiceEmailDraft } from "@/lib/invoice-email";
 import { shareInvoicePdf } from "@/lib/invoice-pdf";
 import { INVOICE_RADIUS } from "@/lib/invoice-ui";
 import {
@@ -90,18 +90,12 @@ export default function InvoiceCreatedScreen() {
   const handleOpenEmailDraft = async () => {
     if (!invoice || !details) return;
     setActionLoading("open-email");
-    setError(null);
     try {
-      const mailto = buildMailtoUrl(buildInvoiceEmail(invoice, details.draft));
-      const supported = await Linking.canOpenURL(mailto);
-      if (!supported) {
-        throw new Error("No mail app is available on this device.");
-      }
-      await Linking.openURL(mailto);
+      await openInvoiceEmailDraft(invoice, details.draft);
       setPreparedEmail(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (err) {
-      setError(getErrorMessage(err, "Could not open email composer."));
+      Alert.alert("Email Unavailable", getErrorMessage(err, "Could not open email composer."));
     } finally {
       setActionLoading(null);
     }
@@ -110,7 +104,6 @@ export default function InvoiceCreatedScreen() {
   const handleConfirmSent = async () => {
     if (!invoice) return;
     setActionLoading("confirm-sent");
-    setError(null);
     try {
       const updated = await sendInvoice(invoice.id);
       setInvoice(updated);
@@ -123,7 +116,7 @@ export default function InvoiceCreatedScreen() {
         },
       });
     } catch (err) {
-      setError(getErrorMessage(err, "Could not mark this invoice as sent."));
+      Alert.alert("Update Failed", getErrorMessage(err, "Could not mark this invoice as sent."));
     } finally {
       setActionLoading(null);
     }
@@ -132,12 +125,11 @@ export default function InvoiceCreatedScreen() {
   const handleDownloadPdf = async () => {
     if (!invoice || !details) return;
     setActionLoading("pdf");
-    setError(null);
     try {
       await shareInvoicePdf(invoice, details.draft);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (err) {
-      setError(getErrorMessage(err, "Could not prepare the invoice PDF."));
+      Alert.alert("PDF Error", getErrorMessage(err, "Could not prepare the invoice PDF."));
     } finally {
       setActionLoading(null);
     }

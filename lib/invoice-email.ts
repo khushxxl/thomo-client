@@ -1,5 +1,7 @@
 import { formatDraftDate, lineItemTotal, type InvoiceDraft } from "@/lib/invoice-draft";
+import { createInvoicePdf } from "@/lib/invoice-pdf";
 import { formatInvoiceAmount, type Invoice } from "@/lib/invoices";
+import * as MailComposer from "expo-mail-composer";
 
 export function buildInvoiceEmail(invoice: Invoice, draft: InvoiceDraft): {
   to: string;
@@ -59,4 +61,23 @@ export function buildMailtoUrl({
     body,
   });
   return `mailto:${encodeURIComponent(to)}?${params.toString()}`;
+}
+
+export async function openInvoiceEmailDraft(invoice: Invoice, draft: InvoiceDraft): Promise<void> {
+  const { to, subject, body } = buildInvoiceEmail(invoice, draft);
+  const isMailAvailable = await MailComposer.isAvailableAsync();
+
+  if (!isMailAvailable) {
+    throw new Error(
+      "Apple Mail is not configured on this device. Please set up Apple Mail in Settings to send attachments, or use 'Download PDF' to share it via Gmail or other apps.",
+    );
+  }
+
+  const pdfUri = await createInvoicePdf(invoice, draft);
+  await MailComposer.composeAsync({
+    recipients: to ? [to] : [],
+    subject,
+    body,
+    attachments: [pdfUri],
+  });
 }

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Platform, Pressable, ScrollView, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { TextWrapper } from "@/components/text-wrapper";
@@ -8,14 +7,10 @@ import {
   calculateInvoiceTotals,
   formatDraftDate,
   lineItemTotal,
-  parseDecimal,
   type InvoiceDraft,
 } from "@/lib/invoice-draft";
 import { INVOICE_RADIUS } from "@/lib/invoice-ui";
-import {
-  invoiceTemplateMeta,
-  invoiceTemplatePreviewStyles,
-} from "@/lib/invoice-templates";
+import { invoiceTemplateMeta } from "@/lib/invoice-templates";
 
 function toTitleCase(value: string): string {
   if (!value) return "";
