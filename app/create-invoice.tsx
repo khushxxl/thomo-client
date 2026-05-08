@@ -38,7 +38,9 @@ function BackArrow({ size = 24 }: { size?: number }) {
   );
 }
 
-function parseDraftParam(raw?: string | string[]): Partial<InvoiceDraft> | null {
+function parseDraftParam(
+  raw?: string | string[],
+): Partial<InvoiceDraft> | null {
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (!value) return null;
   try {
@@ -51,7 +53,6 @@ function parseDraftParam(raw?: string | string[]): Partial<InvoiceDraft> | null 
 function lineItemValue(item: InvoiceLineItemDraft): number {
   return parseDecimal(item.quantity) * parseDecimal(item.unit_price);
 }
-
 
 function updateItem(
   draft: InvoiceDraft,
@@ -81,7 +82,11 @@ function updateField(
 
 export default function CreateInvoiceScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ id?: string; draft?: string; source?: string }>();
+  const params = useLocalSearchParams<{
+    id?: string;
+    draft?: string;
+    source?: string;
+  }>();
   const seeded = useMemo(() => parseDraftParam(params.draft), [params.draft]);
   const [step, setStep] = useState<Step>(params.id ? "form" : "template");
   const [draft, setDraft] = useState<InvoiceDraft>(() =>
@@ -179,16 +184,21 @@ export default function CreateInvoiceScreen() {
           >
             <BackArrow size={20} />
           </Pressable>
-          <TextWrapper weight="regular" style={{ fontSize: 16, color: "#A3A3A3" }}>
+          <TextWrapper
+            weight="regular"
+            style={{ fontSize: 16, color: "#A3A3A3" }}
+          >
             {stepNumber} of 3
           </TextWrapper>
         </View>
       </View>
 
-
       {error ? (
         <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
-          <TextWrapper weight="regular" style={{ fontSize: 14, color: "#DC2626" }}>
+          <TextWrapper
+            weight="regular"
+            style={{ fontSize: 14, color: "#DC2626" }}
+          >
             {error}
           </TextWrapper>
         </View>

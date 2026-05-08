@@ -2,7 +2,7 @@ name: Production → App Store
 
 on:
   push:
-    branches: ['main']
+    branches: ["main"]
 
 jobs:
   build_ios:
